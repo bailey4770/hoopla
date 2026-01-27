@@ -5,6 +5,7 @@ from typing import cast
 from lib.search_utils import (
     DEFAULT_SEARCH_LIMIT,
     load_movies,
+    load_stopwords,
     process_string,
     print_search_results,
 )
@@ -14,13 +15,14 @@ def keyword_search(
     query: str, limit: int = DEFAULT_SEARCH_LIMIT
 ) -> list[tuple[int, str]]:
     movies = load_movies()
+    stopwords = load_stopwords()
 
     search_results: list[tuple[int, str]] = []
-    processed_query = process_string(query)
+    processed_query = process_string(query, stopwords)
 
     for movie in movies:
         title = movie["title"]
-        processed_title = process_string(title)
+        processed_title = process_string(title, stopwords)
 
         if any(q in t for q in processed_query for t in processed_title):
             search_results.append((movie["id"], title))
