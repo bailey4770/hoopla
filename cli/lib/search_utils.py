@@ -2,7 +2,7 @@ import json
 import string
 from nltk.stem import PorterStemmer
 
-from typing import TypedDict, cast
+from typing import TypedDict, cast, Callable
 
 
 class Movie(TypedDict):
@@ -24,7 +24,7 @@ _PUNCT_TABLE = str.maketrans("", "", string.punctuation)
 DEFAULT_SEARCH_LIMIT = 5
 
 
-def process_string():
+def process_string() -> Callable[[str], set[str]]:
     def _load_stopwords() -> set[str]:
         with open(STOPWORDS_FILE_PATH, "r") as f:
             stopwords = f.read().splitlines()

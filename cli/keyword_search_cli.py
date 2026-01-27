@@ -1,54 +1,16 @@
 #!/usr/bin/env python3
 
 import argparse
-import pickle
-from pathlib import Path
-from collections import defaultdict
 from typing import cast
 
 from lib.search_utils import (
     DEFAULT_SEARCH_LIMIT,
-    Movies,
     load_movies,
     process_string,
     print_search_results,
-    Movie,
 )
 
-CACHE_DIR = Path("./cache")
-
-
-class InvertedIndex:
-    def __init__(self):
-        self.index: dict[str, set[int]] = defaultdict(set)
-        self.docmap: dict[int, Movie] = {}
-
-    def __add_document(self, doc_id: int, processed_text: set[str]) -> None:
-        for token in processed_text:
-            self.index[token].add(doc_id)
-
-    def get_document(self, term: str) -> list[int]:
-        doc_ids: set[int] = self.index[term.lower()]
-        return sorted(list(doc_ids))
-
-    def build(self, movies: Movies) -> None:
-        processor = process_string()
-        for movie in movies:
-            title = movie["title"]
-            desc = movie["description"]
-            id = movie["id"]
-
-            tokens = processor(title + " " + desc)
-            self.__add_document(id, tokens)
-
-    def save(self) -> None:
-        CACHE_DIR.mkdir(exist_ok=True)
-
-        with open(CACHE_DIR.joinpath("index.pkl"), "wb") as f:
-            pickle.dump(self.index, f)
-
-        with open(CACHE_DIR.joinpath("docmap.pkl"), "wb") as f:
-            pickle.dump(self.docmap, f)
+from lib.inverted_index import InvertedIndex
 
 
 def keyword_search(
