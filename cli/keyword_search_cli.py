@@ -10,22 +10,23 @@ from lib.search_utils import (
 )
 
 
-def keyword_search(query: str, limit=DEFAULT_SEARCH_LIMIT) -> list[tuple[int, str]]:
+def keyword_search(
+    query: str, limit: int = DEFAULT_SEARCH_LIMIT
+) -> list[tuple[int, str]]:
     movies = load_movies()
 
     search_results: list[tuple[int, str]] = []
     processed_query = process_string(query)
 
     for movie in movies:
-        title: str = movie["title"]
-        if processed_query not in process_string(title):
-            continue
+        title = movie["title"]
+        processed_title = process_string(title)
 
-        id: int = movie["id"]
-        search_results.append((id, title))
+        if any(q in t for q in processed_query for t in processed_title):
+            search_results.append((movie["id"], title))
 
-        if len(search_results) >= limit:
-            break
+            if len(search_results) == limit:
+                break
 
     return search_results
 

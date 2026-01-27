@@ -23,11 +23,17 @@ class MovieData(TypedDict):
 _PUNCT_TABLE = str.maketrans("", "", string.punctuation)
 
 
-def process_string(s: str) -> str:
+def process_string(s: str) -> set[str]:
     to_lower = s.lower()
     punc_removed = to_lower.translate(_PUNCT_TABLE)
 
-    return punc_removed
+    tokens = punc_removed.split()
+    for token in tokens:
+        if not token:
+            del token
+    tokens = set(tokens)
+
+    return tokens
 
 
 def load_movies() -> Movies:
