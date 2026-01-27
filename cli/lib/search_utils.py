@@ -1,5 +1,6 @@
 import json
 import string
+from nltk.stem import PorterStemmer
 
 from typing import TypedDict, cast
 
@@ -27,13 +28,16 @@ def process_string(s: str, stopwords: set[str]) -> set[str]:
     punc_removed = to_lower.translate(_PUNCT_TABLE)
 
     tokens = punc_removed.split()
-    removed_stopwords: set[str] = set()
 
+    removed_stopwords: set[str] = set()
     for token in tokens:
         if token and token not in stopwords:
             removed_stopwords.add(token)
 
-    return removed_stopwords
+    stemmer = PorterStemmer()
+    stemmed_tokens: set[str] = set(map(stemmer.stem, removed_stopwords))
+
+    return stemmed_tokens
 
 
 def load_movies() -> Movies:
