@@ -1,52 +1,33 @@
 #!/usr/bin/env python3
 
 import argparse
-import json
-
-from typing import TypedDict, cast
-
-MOVIES_FILE_PATH = "./data/movies.json"
-
-
-class Movie(TypedDict):
-    id: int
-    title: str
-    description: str
+from typing import cast
+from lib.search_utils import (
+    DEFAULT_SEARCH_LIMIT,
+    load_movies,
+    process_string,
+    print_search_results,
+)
 
 
-Movies = list[Movie]
-
-
-class MovieData(TypedDict):
-    movies: Movies
-
-
-def keyword_search(query: str) -> list[tuple[int, str]]:
-    with open(MOVIES_FILE_PATH, "r") as f:
-        movies_data = cast(MovieData, json.load(f))
+def keyword_search(query: str, limit=DEFAULT_SEARCH_LIMIT) -> list[tuple[int, str]]:
+    movies = load_movies()
 
     search_results: list[tuple[int, str]] = []
+    processed_query = process_string(query)
 
-    for movie in movies_data["movies"]:
+    for movie in movies:
         title: str = movie["title"]
+        if processed_query not in process_string(title):
+            continue
 
-        if query in title:
-            id: int = movie["id"]
-            search_results.append((id, title))
+        id: int = movie["id"]
+        search_results.append((id, title))
+
+        if len(search_results) >= limit:
+            break
 
     return search_results
-
-
-def print_search_results(query: str, search_results: list[tuple[int, str]]):
-    ordered = sorted(search_results, key=lambda movie: movie[0])
-    truncated = ordered[:5]
-
-    print(f"Searching for: {query}")
-
-    count = 0
-    for res in truncated:
-        count += 1
-        print(f"{count}. {res[1]}")
 
 
 def main() -> None:
@@ -57,11 +38,12 @@ def main() -> None:
     _ = search_parser.add_argument("query", type=str, help="Search query")
 
     args = parser.parse_args()
+    query = cast(str, args.query)
 
-    match args.command:
+    match cast(str, args.command):
         case "search":
-            search_results = keyword_search(args.query)
-            print_search_results(args.query, search_results)
+            search_results = keyword_search(query)
+            print_search_results(query, search_results)
         case _:
             parser.print_help()
 
