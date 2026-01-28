@@ -14,6 +14,14 @@ from lib.search_utils import (
 from lib.inverted_index import InvertedIndex
 
 
+def cmd_build() -> None:
+    movies = load_movies()
+
+    inv_idx = InvertedIndex()
+    inv_idx.build(movies)
+    inv_idx.save()
+
+
 def cmd_search(query: str, limit: int = DEFAULT_SEARCH_LIMIT) -> None:
     index = InvertedIndex()
     try:
@@ -38,12 +46,12 @@ def cmd_search(query: str, limit: int = DEFAULT_SEARCH_LIMIT) -> None:
     print_search_results(query, search_results)
 
 
-def cmd_build() -> None:
-    movies = load_movies()
+def cmd_tf(doc_id: int, term: str):
+    index = InvertedIndex()
+    index.load()
 
-    inv_idx = InvertedIndex()
-    inv_idx.build(movies)
-    inv_idx.save()
+    count = index.get_tf(doc_id, term)
+    print(count)
 
 
 def main() -> None:
@@ -57,6 +65,12 @@ def main() -> None:
         "build", help="Build inverted index of movie titles and descriptions"
     )
 
+    tf_parser = subparsers.add_parser(
+        "tf", help="Get the term frequency of a term in a document"
+    )
+    _ = tf_parser.add_argument("doc_id", type=int, help="ID of doc to check")
+    _ = tf_parser.add_argument("term", type=str, help="Search term")
+
     args = parser.parse_args()
 
     match cast(str, args.command):
@@ -65,6 +79,9 @@ def main() -> None:
 
         case "search":
             cmd_search(cast(str, args.query))
+
+        case "tf":
+            cmd_tf(cast(int, args.doc_id), cast(str, args.term))
 
         case _:
             parser.print_help()

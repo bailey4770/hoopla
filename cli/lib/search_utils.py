@@ -24,7 +24,7 @@ _PUNCT_TABLE = str.maketrans("", "", string.punctuation)
 DEFAULT_SEARCH_LIMIT = 5
 
 
-def process_string() -> Callable[[str], set[str]]:
+def process_string() -> Callable[[str], list[str]]:
     def _load_stopwords() -> set[str]:
         with open(STOPWORDS_FILE_PATH, "r") as f:
             stopwords = f.read().splitlines()
@@ -33,12 +33,12 @@ def process_string() -> Callable[[str], set[str]]:
     stopwords = _load_stopwords()
     stemmer = PorterStemmer()
 
-    def wrapper(s: str) -> set[str]:
+    def wrapper(s: str) -> list[str]:
         punc_removed = s.lower().translate(_PUNCT_TABLE)
         tokens = punc_removed.split()
 
-        filtered = {t for t in tokens if t and t not in stopwords}
-        return {stemmer.stem(t) for t in filtered}
+        filtered = [t for t in tokens if t and t not in stopwords]
+        return [stemmer.stem(t) for t in filtered]
 
     return wrapper
 

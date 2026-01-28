@@ -1,4 +1,4 @@
-from collections import defaultdict
+from collections import defaultdict, Counter
 import pickle
 from pathlib import Path
 import os
@@ -19,6 +19,7 @@ class InvertedIndex:
     def __init__(self):
         self.index: dict[str, set[int]] = defaultdict(set)
         self.docmap: dict[int, str] = {}
+        self.term_frequencies: dict[int, Counter[str]] = {}
 
     def get_document(self, term: str) -> list[tuple[int, str]]:
         doc_ids: set[int] = self.index[term.lower()]
@@ -29,6 +30,15 @@ class InvertedIndex:
 
         return sorted(list(zip(doc_ids, docs)))
 
+    def get_tf(self, doc_id: int, term: str) -> int:
+        tokens = process_string()(term)
+        if len(tokens) != 1:
+            raise ValueError("invalid search term")
+        token: str = tokens.pop()
+
+        term_counter = self.term_frequencies[doc_id]
+        return term_counter[token]
+
     def build(self, movies: Movies) -> None:
         # build is CPU intensive. We can speed up process by using all cores
         num_workers = os.cpu_count() or 4
@@ -36,9 +46,14 @@ class InvertedIndex:
         chunks = [movies[i : i + chunk_size] for i in range(0, len(movies), chunk_size)]
 
         with Pool(num_workers) as pool:
-            partial_indexes: list[dict[str, set[int]]] = pool.map(
-                _build_partial_index, chunks
-            )
+            partial_builds: list[
+                tuple[dict[str, set[int]], dict[int, Counter[str]]]
+            ] = pool.map(_build_partial_index, chunks)
+
+        partial_indexes: list[dict[str, set[int]]] = []
+        for pb in partial_builds:
+            partial_indexes.append(pb[0])
+            self.term_frequencies |= pb[1]
 
         for pidx in partial_indexes:
             for token, ids in pidx.items():
@@ -56,6 +71,9 @@ class InvertedIndex:
         with open(CACHE_DIR.joinpath("docmap.pkl"), "wb") as f:
             pickle.dump(self.docmap, f)
 
+        with open(CACHE_DIR.joinpath("term_frequencies.pkl"), "wb") as f:
+            pickle.dump(self.term_frequencies, f)
+
     def load(self) -> None:
         index_path = CACHE_DIR.joinpath("index.pkl")
         if not index_path.exists():
@@ -65,20 +83,34 @@ class InvertedIndex:
         if not docmap_path.exists():
             raise FileNotFoundError()
 
+        term_frequencies_path = CACHE_DIR.joinpath("term_frequencies.pkl")
+        if not term_frequencies_path.exists():
+            raise FileNotFoundError()
+
         with open(index_path, "rb") as f:
             self.index = pickle.load(f)
 
         with open(docmap_path, "rb") as f:
             self.docmap = pickle.load(f)
 
+        with open(term_frequencies_path, "rb") as f:
+            self.term_frequencies = pickle.load(f)
 
-def _build_partial_index(movies_chunk: Movies) -> dict[str, set[int]]:
+
+def _build_partial_index(
+    movies_chunk: Movies,
+) -> tuple[dict[str, set[int]], dict[int, Counter[str]]]:
     processor: Callable[[str], set[str]] = process_string()
+
     partial_index: dict[str, set[int]] = defaultdict(set)
+    partial_tf: dict[int, Counter[str]] = {}
 
     for movie in movies_chunk:
+        id = movie["id"]
         tokens = processor(movie["title"] + " " + movie["description"])
         for token in tokens:
-            partial_index[token].add(movie["id"])
+            partial_index[token].add(id)
 
-    return dict(partial_index)
+        partial_tf[id] = Counter(tokens)
+
+    return dict(partial_index), partial_tf
