@@ -1,6 +1,5 @@
 from collections import defaultdict, Counter
 import pickle
-from pathlib import Path
 import os
 import math
 import statistics
@@ -8,9 +7,14 @@ from multiprocessing import Pool
 
 from typing import Callable
 
-from .search_utils import BM25_B, BM25_K1, DEFAULT_SEARCH_LIMIT, process_string, Movies
-
-CACHE_DIR = Path("./cache")
+from .search_utils import (
+    BM25_B,
+    BM25_K1,
+    DEFAULT_SEARCH_LIMIT,
+    CACHE_DIR,
+    process_string,
+    Movies,
+)
 
 
 class InvertedIndex:

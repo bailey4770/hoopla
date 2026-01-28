@@ -1,6 +1,7 @@
 import json
 import string
 from nltk.stem import PorterStemmer
+from pathlib import Path
 
 from typing import TypedDict, cast, Callable
 
@@ -20,6 +21,8 @@ class MovieData(TypedDict):
 
 MOVIES_FILE_PATH = "./data/movies.json"
 STOPWORDS_FILE_PATH = "./data/stopwords.txt"
+CACHE_DIR = Path("./cache")
+
 _PUNCT_TABLE = str.maketrans("", "", string.punctuation)
 DEFAULT_SEARCH_LIMIT = 5
 BM25_K1 = 1.5
