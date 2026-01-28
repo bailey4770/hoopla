@@ -3,11 +3,12 @@ import pickle
 from pathlib import Path
 import os
 import math
+import statistics
 from multiprocessing import Pool
 
 from typing import Callable
 
-from .search_utils import process_string, Movies, BM25_K1
+from .search_utils import process_string, Movies
 
 CACHE_DIR = Path("./cache")
 
@@ -17,6 +18,7 @@ class InvertedIndex:
         self.index: dict[str, set[int]] = defaultdict(set)
         self.docmap: dict[int, str] = {}
         self.term_frequencies: dict[int, Counter[str]] = {}
+        self.doc_lengths: dict[int, int] = {}
 
     def get_document(self, term: str) -> list[tuple[int, str]]:
         doc_ids: set[int] = self.index[term.lower()]
@@ -49,9 +51,19 @@ class InvertedIndex:
 
         return math.log(numerator / denominator + 1)
 
-    def get_bm25_tf(self, doc_id: int, term: str, k1: float = BM25_K1) -> float:
+    def __get_average_doc_length(self) -> float:
+        if len(self.doc_lengths) == 0:
+            return 0.0
+
+        return statistics.mean(self.doc_lengths.values())
+
+    def get_bm25_tf(self, doc_id: int, term: str, k1: float, b: float) -> float:
+        length_norm_factor = (
+            1 - b + (b * (self.doc_lengths[doc_id] / self.__get_average_doc_length()))
+        )
+
         tf = self.get_tf(doc_id, term)
-        return (tf * (k1 + 1)) / (tf + k1)
+        return (tf * (k1 + 1)) / (tf + (k1 * (length_norm_factor)))
 
     def build(self, movies: Movies) -> None:
         # build is CPU intensive. We can speed up process by using all cores
@@ -60,14 +72,17 @@ class InvertedIndex:
         chunks = [movies[i : i + chunk_size] for i in range(0, len(movies), chunk_size)]
 
         with Pool(num_workers) as pool:
-            partial_builds: list[
-                tuple[dict[str, set[int]], dict[int, Counter[str]]]
-            ] = pool.map(_build_partial_index, chunks)
+            partial_builds = pool.map(_build_partial_index, chunks)
 
         partial_indexes: list[dict[str, set[int]]] = []
-        for pb in partial_builds:
-            partial_indexes.append(pb[0])
-            self.term_frequencies |= pb[1]
+        for (
+            partial_index,
+            partial_term_frequencies,
+            partial_doc_lengths,
+        ) in partial_builds:
+            partial_indexes.append(partial_index)
+            self.term_frequencies |= partial_term_frequencies
+            self.doc_lengths |= partial_doc_lengths
 
         for pidx in partial_indexes:
             for token, ids in pidx.items():
@@ -88,6 +103,9 @@ class InvertedIndex:
         with open(CACHE_DIR.joinpath("term_frequencies.pkl"), "wb") as f:
             pickle.dump(self.term_frequencies, f)
 
+        with open(CACHE_DIR.joinpath("doc_lengths.pkl"), "wb") as f:
+            pickle.dump(self.doc_lengths, f)
+
     def load(self) -> None:
         index_path = CACHE_DIR.joinpath("index.pkl")
         if not index_path.exists():
@@ -101,6 +119,10 @@ class InvertedIndex:
         if not term_frequencies_path.exists():
             raise FileNotFoundError()
 
+        doc_lengths_path = CACHE_DIR.joinpath("doc_lengths.pkl")
+        if not term_frequencies_path.exists():
+            raise FileNotFoundError()
+
         with open(index_path, "rb") as f:
             self.index = pickle.load(f)
 
@@ -110,14 +132,18 @@ class InvertedIndex:
         with open(term_frequencies_path, "rb") as f:
             self.term_frequencies = pickle.load(f)
 
+        with open(doc_lengths_path, "rb") as f:
+            self.doc_lengths = pickle.load(f)
+
 
 def _build_partial_index(
     movies_chunk: Movies,
-) -> tuple[dict[str, set[int]], dict[int, Counter[str]]]:
+) -> tuple[dict[str, set[int]], dict[int, Counter[str]], dict[int, int]]:
     processor: Callable[[str], list[str]] = process_string()
 
     partial_index: dict[str, set[int]] = defaultdict(set)
     partial_tf: dict[int, Counter[str]] = {}
+    partial_doc_lengths: dict[int, int] = {}
 
     for movie in movies_chunk:
         id = movie["id"]
@@ -126,5 +152,6 @@ def _build_partial_index(
             partial_index[token].add(id)
 
         partial_tf[id] = Counter(tokens)
+        partial_doc_lengths[id] = len(tokens)
 
-    return dict(partial_index), partial_tf
+    return partial_index, partial_tf, partial_doc_lengths

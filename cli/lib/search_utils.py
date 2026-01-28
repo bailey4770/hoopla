@@ -23,6 +23,7 @@ STOPWORDS_FILE_PATH = "./data/stopwords.txt"
 _PUNCT_TABLE = str.maketrans("", "", string.punctuation)
 DEFAULT_SEARCH_LIMIT = 5
 BM25_K1 = 1.5
+BM25_B = 0.75
 
 
 def process_string() -> Callable[[str], list[str]]:

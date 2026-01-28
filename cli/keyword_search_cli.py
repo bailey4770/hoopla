@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 
 import argparse
-from ast import Invert
 import sys
 import math
+import time
 from typing import cast
 
 from lib.search_utils import (
     BM25_K1,
+    BM25_B,
     DEFAULT_SEARCH_LIMIT,
     load_movies,
     process_string,
@@ -60,16 +61,26 @@ def get_parser() -> argparse.ArgumentParser:
     _ = bm25_tf_parser.add_argument(
         "k1", type=float, nargs="?", default=BM25_K1, help="Tunable BM25 K1 parameter"
     )
+    _ = bm25_tf_parser.add_argument(
+        "b", type=float, nargs="?", default=BM25_B, help="Tunable BM25 b parameter"
+    )
 
     return parser
 
 
 def cmd_build() -> None:
+    print("Building index...")
+    start = time.time()
+
     movies = load_movies()
 
     inv_idx = InvertedIndex()
     inv_idx.build(movies)
     inv_idx.save()
+
+    end = time.time()
+
+    print(f"Built index in {end - start}s")
 
 
 def cmd_search(
@@ -115,57 +126,71 @@ def cmd_bm25_idf(index: InvertedIndex, term: str) -> float:
 
 
 def cmd_bm25_tf(
-    index: InvertedIndex, doc_id: int, term: str, k1: float = BM25_K1
+    index: InvertedIndex, doc_id: int, term: str, k1: float = BM25_K1, b: float = BM25_B
 ) -> float:
-    return index.get_bm25_tf(doc_id, term, k1)
+    return index.get_bm25_tf(doc_id, term, k1, b)
+
+
+def _get_index() -> InvertedIndex:
+    index = InvertedIndex()
+    try:
+        index.load()
+    except FileNotFoundError:
+        print("Error: index files not found")
+    except Exception as e:
+        print("Error: ", e)
+        sys.exit(1)
+
+    return index
 
 
 def main() -> None:
     parser = get_parser()
     args = parser.parse_args()
 
-    index = InvertedIndex()
-    try:
-        index.load()
-    except FileNotFoundError:
-        print("Error: index files not found")
-        sys.exit(1)
-    except Exception as e:
-        print("Error: ", e)
-        sys.exit(1)
-
     match cast(str, args.command):
         case "build":
             cmd_build()
 
         case "search":
+            index = _get_index()
             query = cast(str, args.query)
             search_results = cmd_search(index, query)
             print_search_results(query, search_results)
 
         case "tf":
+            index = _get_index()
             doc_id, term = cast(int, args.doc_id), cast(str, args.term)
             tf = cmd_tf(index, doc_id, term)
             print(tf)
 
         case "idf":
+            index = _get_index()
             term = cast(str, args.term)
             idf = cmd_idf(index, term)
             print(f"Inverse document frequency of '{term}': {idf:.2f}")
 
         case "tfidf":
+            index = _get_index()
             doc_id, term = cast(int, args.doc_id), cast(str, args.term)
             tf_idf = cmd_tfidf(index, doc_id, term)
             print(f"TF-IDF score of '{term}' in document '{doc_id}': {tf_idf:.2f}")
 
         case "bm25idf":
+            index = _get_index()
             term = cast(str, args.term)
             bm25_idf = cmd_bm25_idf(index, term)
             print(f"BM25 IDF score of '{term}': {bm25_idf:.2f}")
 
         case "bm25tf":
-            doc_id, term = cast(int, args.doc_id), cast(str, args.term)
-            bm25tf = cmd_bm25_tf(index, doc_id, term)
+            index = _get_index()
+            doc_id, term, k1, b = (
+                cast(int, args.doc_id),
+                cast(str, args.term),
+                cast(float, args.k1),
+                cast(float, args.b),
+            )
+            bm25tf = cmd_bm25_tf(index, doc_id, term, k1, b)
             print(f"BM25 TF score of '{term}' in document '{doc_id}': {bm25tf:.2f}")
 
         case _:
