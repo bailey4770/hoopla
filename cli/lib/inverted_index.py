@@ -36,8 +36,21 @@ class InvertedIndex:
             raise ValueError("invalid search term")
         token: str = tokens.pop()
 
-        term_counter = self.term_frequencies[doc_id]
-        return term_counter[token]
+        return self.term_frequencies[doc_id][token]
+
+    def get_bm25_idf(self, term: str) -> float:
+        tokens = process_string()(term)
+        if len(tokens) != 1:
+            raise ValueError("invalid search term")
+        token: str = tokens.pop()
+
+        total_doc_count = len(self.docmap)
+        term_match_doc_count = len(self.index.get(token, set()))
+
+        numerator = total_doc_count - term_match_doc_count + 0.5
+        denominator = term_match_doc_count + 0.5
+
+        return math.log(numerator / denominator + 1)
 
     def build(self, movies: Movies) -> None:
         # build is CPU intensive. We can speed up process by using all cores
@@ -100,7 +113,7 @@ class InvertedIndex:
 def _build_partial_index(
     movies_chunk: Movies,
 ) -> tuple[dict[str, set[int]], dict[int, Counter[str]]]:
-    processor: Callable[[str], set[str]] = process_string()
+    processor: Callable[[str], list[str]] = process_string()
 
     partial_index: dict[str, set[int]] = defaultdict(set)
     partial_tf: dict[int, Counter[str]] = {}
