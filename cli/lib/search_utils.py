@@ -22,6 +22,7 @@ MOVIES_FILE_PATH = "./data/movies.json"
 STOPWORDS_FILE_PATH = "./data/stopwords.txt"
 _PUNCT_TABLE = str.maketrans("", "", string.punctuation)
 DEFAULT_SEARCH_LIMIT = 5
+BM25_K1 = 1.5
 
 
 def process_string() -> Callable[[str], list[str]]:

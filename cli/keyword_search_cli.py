@@ -7,6 +7,7 @@ import math
 from typing import cast
 
 from lib.search_utils import (
+    BM25_K1,
     DEFAULT_SEARCH_LIMIT,
     load_movies,
     process_string,
@@ -48,6 +49,17 @@ def get_parser() -> argparse.ArgumentParser:
         "bm25idf", help="Get the BM25 IDF of a term in the dataset"
     )
     _ = bm25_idf_parser.add_argument("term", type=str, help="Search term")
+
+    bm25_tf_parser = subparsers.add_parser(
+        "bm25tf", help="Get BM25 TF score for a given document ID and term"
+    )
+    _ = bm25_tf_parser.add_argument("doc_id", type=int, help="Document ID")
+    _ = bm25_tf_parser.add_argument(
+        "term", type=str, help="Term to get BM25 TF score for"
+    )
+    _ = bm25_tf_parser.add_argument(
+        "k1", type=float, nargs="?", default=BM25_K1, help="Tunable BM25 K1 parameter"
+    )
 
     return parser
 
@@ -102,6 +114,12 @@ def cmd_bm25_idf(index: InvertedIndex, term: str) -> float:
     return index.get_bm25_idf(term)
 
 
+def cmd_bm25_tf(
+    index: InvertedIndex, doc_id: int, term: str, k1: float = BM25_K1
+) -> float:
+    return index.get_bm25_tf(doc_id, term, k1)
+
+
 def main() -> None:
     parser = get_parser()
     args = parser.parse_args()
@@ -144,6 +162,11 @@ def main() -> None:
             term = cast(str, args.term)
             bm25_idf = cmd_bm25_idf(index, term)
             print(f"BM25 IDF score of '{term}': {bm25_idf:.2f}")
+
+        case "bm25tf":
+            doc_id, term = cast(int, args.doc_id), cast(str, args.term)
+            bm25tf = cmd_bm25_tf(index, doc_id, term)
+            print(f"BM25 TF score of '{term}' in document '{doc_id}': {bm25tf:.2f}")
 
         case _:
             parser.print_help()

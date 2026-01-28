@@ -7,10 +7,7 @@ from multiprocessing import Pool
 
 from typing import Callable
 
-from .search_utils import (
-    process_string,
-    Movies,
-)
+from .search_utils import process_string, Movies, BM25_K1
 
 CACHE_DIR = Path("./cache")
 
@@ -51,6 +48,10 @@ class InvertedIndex:
         denominator = term_match_doc_count + 0.5
 
         return math.log(numerator / denominator + 1)
+
+    def get_bm25_tf(self, doc_id: int, term: str, k1: float = BM25_K1) -> float:
+        tf = self.get_tf(doc_id, term)
+        return (tf * (k1 + 1)) / (tf + k1)
 
     def build(self, movies: Movies) -> None:
         # build is CPU intensive. We can speed up process by using all cores
