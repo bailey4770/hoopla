@@ -8,7 +8,7 @@ from multiprocessing import Pool
 
 from typing import Callable
 
-from .search_utils import process_string, Movies
+from .search_utils import BM25_B, BM25_K1, DEFAULT_SEARCH_LIMIT, process_string, Movies
 
 CACHE_DIR = Path("./cache")
 
@@ -57,13 +57,35 @@ class InvertedIndex:
 
         return statistics.mean(self.doc_lengths.values())
 
-    def get_bm25_tf(self, doc_id: int, term: str, k1: float, b: float) -> float:
+    def get_bm25_tf(
+        self, doc_id: int, term: str, k1: float = BM25_K1, b: float = BM25_B
+    ) -> float:
         length_norm_factor = (
             1 - b + (b * (self.doc_lengths[doc_id] / self.__get_average_doc_length()))
         )
 
         tf = self.get_tf(doc_id, term)
         return (tf * (k1 + 1)) / (tf + (k1 * (length_norm_factor)))
+
+    def bm25(self, doc_id: int, term: str) -> float:
+        tf = self.get_bm25_tf(doc_id, term)
+        idf = self.get_bm25_idf(term)
+        return tf * idf
+
+    def bm25_search(
+        self, query: str, limit: int = DEFAULT_SEARCH_LIMIT
+    ) -> list[tuple[int, str, float]]:
+        processed_query = process_string()(query)
+        scores: dict[int, float] = {}
+
+        for doc_id in self.docmap.keys():
+            scores[doc_id] = sum(self.bm25(doc_id, q) for q in processed_query)
+
+        sorted_scores = sorted(scores, key=lambda s: scores[s], reverse=True)
+        truncated = sorted_scores[:limit]
+
+        results = [(s, self.docmap[s], scores[s]) for s in truncated]
+        return results
 
     def build(self, movies: Movies) -> None:
         # build is CPU intensive. We can speed up process by using all cores
