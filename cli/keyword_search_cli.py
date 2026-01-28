@@ -2,6 +2,7 @@
 
 import argparse
 import sys
+import math
 from typing import cast
 
 from lib.search_utils import (
@@ -48,10 +49,36 @@ def cmd_search(query: str, limit: int = DEFAULT_SEARCH_LIMIT) -> None:
 
 def cmd_tf(doc_id: int, term: str):
     index = InvertedIndex()
-    index.load()
+    try:
+        index.load()
+    except FileNotFoundError:
+        print("Error: index files not found")
+        sys.exit(1)
+    except Exception as e:
+        print("Error: ", e)
+        sys.exit(1)
 
     count = index.get_tf(doc_id, term)
     print(count)
+
+
+def cmd_idf(term: str):
+    index = InvertedIndex()
+    try:
+        index.load()
+    except FileNotFoundError:
+        print("Error: index files not found")
+        sys.exit(1)
+    except Exception as e:
+        print("Error: ", e)
+        sys.exit(1)
+
+    total_doc_count = len(index.docmap)
+    ids = [k for k in index.docmap.keys()]
+    term_match_doc_count = sum(1 if index.get_tf(id, term) > 0 else 0 for id in ids)
+
+    idf = math.log((total_doc_count + 1) / (term_match_doc_count + 1))
+    print(f"Inverse document frequency of '{term}': {idf:.2f}")
 
 
 def main() -> None:
@@ -66,22 +93,27 @@ def main() -> None:
     )
 
     tf_parser = subparsers.add_parser(
-        "tf", help="Get the term frequency of a term in a document"
+        "tf", help="Get the Term Frequency of a term in a document"
     )
     _ = tf_parser.add_argument("doc_id", type=int, help="ID of doc to check")
     _ = tf_parser.add_argument("term", type=str, help="Search term")
+
+    idf_parser = subparsers.add_parser(
+        "idf", help="Get the Inverse Document Frequency of a term in the dataset"
+    )
+    _ = idf_parser.add_argument("term", type=str, help="Search term")
 
     args = parser.parse_args()
 
     match cast(str, args.command):
         case "build":
             cmd_build()
-
         case "search":
             cmd_search(cast(str, args.query))
-
         case "tf":
             cmd_tf(cast(int, args.doc_id), cast(str, args.term))
+        case "idf":
+            cmd_idf(cast(str, args.term))
 
         case _:
             parser.print_help()
