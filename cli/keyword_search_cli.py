@@ -23,7 +23,7 @@ def cmd_build() -> None:
     inv_idx.save()
 
 
-def cmd_search(query: str, limit: int = DEFAULT_SEARCH_LIMIT) -> None:
+def cmd_search(query: str, limit: int = DEFAULT_SEARCH_LIMIT) -> list[tuple[int, str]]:
     index = InvertedIndex()
     try:
         index.load()
@@ -44,10 +44,10 @@ def cmd_search(query: str, limit: int = DEFAULT_SEARCH_LIMIT) -> None:
             search_results = search_results[:limit]
             break
 
-    print_search_results(query, search_results)
+    return search_results
 
 
-def cmd_tf(doc_id: int, term: str):
+def cmd_tf(doc_id: int, term: str) -> int:
     index = InvertedIndex()
     try:
         index.load()
@@ -58,11 +58,10 @@ def cmd_tf(doc_id: int, term: str):
         print("Error: ", e)
         sys.exit(1)
 
-    count = index.get_tf(doc_id, term)
-    print(count)
+    return index.get_tf(doc_id, term)
 
 
-def cmd_idf(term: str):
+def cmd_idf(term: str) -> float:
     index = InvertedIndex()
     try:
         index.load()
@@ -77,8 +76,23 @@ def cmd_idf(term: str):
     ids = [k for k in index.docmap.keys()]
     term_match_doc_count = sum(1 if index.get_tf(id, term) > 0 else 0 for id in ids)
 
-    idf = math.log((total_doc_count + 1) / (term_match_doc_count + 1))
-    print(f"Inverse document frequency of '{term}': {idf:.2f}")
+    return math.log((total_doc_count + 1) / (term_match_doc_count + 1))
+
+
+def cmd_tfidf(doc_id: int, term: str):
+    index = InvertedIndex()
+    try:
+        index.load()
+    except FileNotFoundError:
+        print("Error: index files not found")
+        sys.exit(1)
+    except Exception as e:
+        print("Error: ", e)
+        sys.exit(1)
+
+    tf = cmd_tf(doc_id, term)
+    idf = cmd_idf(term)
+    return tf * idf
 
 
 def main() -> None:
@@ -103,17 +117,37 @@ def main() -> None:
     )
     _ = idf_parser.add_argument("term", type=str, help="Search term")
 
+    tf_idf_parser = subparsers.add_parser(
+        "tfidf", help="Get the TF-IDF of a term in a document"
+    )
+    _ = tf_idf_parser.add_argument("doc_id", type=int, help="ID of doc to check")
+    _ = tf_idf_parser.add_argument("term", type=str, help="Search term")
+
     args = parser.parse_args()
 
     match cast(str, args.command):
         case "build":
             cmd_build()
+
         case "search":
-            cmd_search(cast(str, args.query))
+            query = cast(str, args.query)
+            search_results = cmd_search(query)
+            print_search_results(query, search_results)
+
         case "tf":
-            cmd_tf(cast(int, args.doc_id), cast(str, args.term))
+            doc_id, term = cast(int, args.doc_id), cast(str, args.term)
+            tf = cmd_tf(doc_id, term)
+            print(tf)
+
         case "idf":
-            cmd_idf(cast(str, args.term))
+            term = cast(str, args.term)
+            idf = cmd_idf(term)
+            print(f"Inverse document frequency of '{term}': {idf:.2f}")
+
+        case "tfidf":
+            doc_id, term = cast(int, args.doc_id), cast(str, args.term)
+            tf_idf = cmd_tfidf(doc_id, term)
+            print(f"TF-IDF score of '{term}' in document '{doc_id}': {tf_idf:.2f}")
 
         case _:
             parser.print_help()
