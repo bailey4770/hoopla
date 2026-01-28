@@ -9,7 +9,6 @@ from typing import Callable
 
 from .search_utils import (
     process_string,
-    Movie,
     Movies,
 )
 
@@ -19,11 +18,16 @@ CACHE_DIR = Path("./cache")
 class InvertedIndex:
     def __init__(self):
         self.index: dict[str, set[int]] = defaultdict(set)
-        self.docmap: dict[int, Movie] = {}
+        self.docmap: dict[int, str] = {}
 
-    def get_document(self, term: str) -> list[int]:
+    def get_document(self, term: str) -> list[tuple[int, str]]:
         doc_ids: set[int] = self.index[term.lower()]
-        return sorted(list(doc_ids))
+
+        docs: list[str] = []
+        for id in doc_ids:
+            docs.append(self.docmap[id])
+
+        return sorted(list(zip(doc_ids, docs)))
 
     def build(self, movies: Movies) -> None:
         # build is CPU intensive. We can speed up process by using all cores
@@ -40,6 +44,9 @@ class InvertedIndex:
             for token, ids in pidx.items():
                 self.index[token] |= ids
 
+        for movie in movies:
+            self.docmap[movie["id"]] = movie["title"]
+
     def save(self) -> None:
         CACHE_DIR.mkdir(exist_ok=True)
 
@@ -48,6 +55,21 @@ class InvertedIndex:
 
         with open(CACHE_DIR.joinpath("docmap.pkl"), "wb") as f:
             pickle.dump(self.docmap, f)
+
+    def load(self) -> None:
+        index_path = CACHE_DIR.joinpath("index.pkl")
+        if not index_path.exists():
+            raise FileNotFoundError()
+
+        docmap_path = CACHE_DIR.joinpath("docmap.pkl")
+        if not docmap_path.exists():
+            raise FileNotFoundError()
+
+        with open(index_path, "rb") as f:
+            self.index = pickle.load(f)
+
+        with open(docmap_path, "rb") as f:
+            self.docmap = pickle.load(f)
 
 
 def _build_partial_index(movies_chunk: Movies) -> dict[str, set[int]]:

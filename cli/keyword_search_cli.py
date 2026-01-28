@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import sys
 from typing import cast
 
 from lib.search_utils import (
@@ -13,26 +14,36 @@ from lib.search_utils import (
 from lib.inverted_index import InvertedIndex
 
 
-def keyword_search(
-    query: str, limit: int = DEFAULT_SEARCH_LIMIT
-) -> list[tuple[int, str]]:
-    movies = load_movies()
-    processor = process_string()
+def cmd_search(query: str, limit: int = DEFAULT_SEARCH_LIMIT) -> None:
+    index = InvertedIndex()
+    try:
+        index.load()
+    except FileNotFoundError:
+        print("Error: index files not found")
+        sys.exit(1)
+    except Exception as e:
+        print("Error: ", e)
+        sys.exit(1)
+
+    processed_query = process_string()(query)
 
     search_results: list[tuple[int, str]] = []
-    processed_query = processor(query)
+    for q in processed_query:
+        search_results.extend(index.get_document(q))
 
-    for movie in movies:
-        title = movie["title"]
-        processed_title = processor(title)
+        if len(search_results) >= limit:
+            search_results = search_results[:limit]
+            break
 
-        if any(q in t for q in processed_query for t in processed_title):
-            search_results.append((movie["id"], title))
+    print_search_results(query, search_results)
 
-            if len(search_results) == limit:
-                break
 
-    return search_results
+def cmd_build() -> None:
+    movies = load_movies()
+
+    inv_idx = InvertedIndex()
+    inv_idx.build(movies)
+    inv_idx.save()
 
 
 def main() -> None:
@@ -50,21 +61,10 @@ def main() -> None:
 
     match cast(str, args.command):
         case "build":
-            movies = load_movies()
-
-            inv_idx = InvertedIndex()
-            inv_idx.build(movies)
-            inv_idx.save()
-
-            # hardcoded test
-            term = "merida"
-            docs = inv_idx.get_document(term)
-            print(f"First document for token 'merida' = {docs[0]}")
+            cmd_build()
 
         case "search":
-            query = cast(str, args.query)
-            search_results = keyword_search(query)
-            print_search_results(query, search_results)
+            cmd_search(cast(str, args.query))
 
         case _:
             parser.print_help()
