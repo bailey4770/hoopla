@@ -4,7 +4,12 @@ import argparse
 from typing import cast
 
 from lib.semantic_search import SemanticSearch
-from lib.search_utils import load_movies, DEFAULT_SEARCH_LIMIT
+from lib.search_utils import (
+    DEFAULT_CHUNK_OVERLAP,
+    load_movies,
+    DEFAULT_SEARCH_LIMIT,
+    DEFAULT_CHUNK_SIZE,
+)
 
 
 def get_parser() -> argparse.ArgumentParser:
@@ -38,6 +43,23 @@ def get_parser() -> argparse.ArgumentParser:
         nargs="?",
         default=DEFAULT_SEARCH_LIMIT,
         help="Number of search results to print",
+    )
+
+    chunk_parser = subparsers.add_parser("chunk", help="Input text to be chunked")
+    _ = chunk_parser.add_argument("text", type=str, help="Text to be chunked")
+    _ = chunk_parser.add_argument(
+        "--chunk-size",
+        type=int,
+        nargs="?",
+        default=DEFAULT_CHUNK_SIZE,
+        help="Number of words per chunk",
+    )
+    _ = chunk_parser.add_argument(
+        "--overlap",
+        type=int,
+        nargs="?",
+        default=DEFAULT_CHUNK_OVERLAP,
+        help="Overlap words per chunk",
     )
 
     return parser
@@ -76,6 +98,24 @@ def cmd_search(query: str, limit: int) -> list[dict[str, str | float]]:
     return search.search(query, limit)
 
 
+def cmd_chunk(
+    text: str,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+    overlap: int = DEFAULT_CHUNK_OVERLAP,
+) -> list[str]:
+    words = text.split()
+    chunks = []
+
+    i = 0
+    while i < len(words):
+        start = max(0, i - overlap) if i > 0 else 0
+        chunk = " ".join(words[start : start + chunk_size])
+        chunks.append(chunk)
+        i += chunk_size
+
+    return chunks
+
+
 def main():
     parser = get_parser()
     args = parser.parse_args()
@@ -112,6 +152,17 @@ def main():
                 print(
                     f"{i}. {res["title"]} (score: {res["score"]})\n{res["description"]}"
                 )
+
+        case "chunk":
+            text = cast(str, args.text)
+            chunk_size = cast(int, args.chunk_size)
+            overlap = cast(int, args.overlap)
+
+            chunks = cmd_chunk(text, chunk_size, overlap)
+
+            print(f"Chunking {len(text)} characters")
+            for i, chunk in enumerate(chunks, 1):
+                print(f"{i}. {chunk}")
 
         case _:
             parser.print_help()
