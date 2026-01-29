@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 
 import argparse
+import re
 from typing import cast
 
 from lib.semantic_search import SemanticSearch
 from lib.search_utils import (
     DEFAULT_CHUNK_OVERLAP,
+    DEFAULT_MAX_CHUNK_SIZE,
     load_movies,
     DEFAULT_SEARCH_LIMIT,
     DEFAULT_CHUNK_SIZE,
@@ -62,6 +64,25 @@ def get_parser() -> argparse.ArgumentParser:
         help="Overlap words per chunk",
     )
 
+    semantic_chunk_parser = subparsers.add_parser(
+        "semantic_chunk", help="Input text to be semantically chunked"
+    )
+    _ = semantic_chunk_parser.add_argument("text", type=str, help="Text to be chunked")
+    _ = semantic_chunk_parser.add_argument(
+        "--max-chunk-size",
+        type=int,
+        nargs="?",
+        default=DEFAULT_MAX_CHUNK_SIZE,
+        help="Number of sentences per chunk",
+    )
+    _ = semantic_chunk_parser.add_argument(
+        "--overlap",
+        type=int,
+        nargs="?",
+        default=0,
+        help="Overlap words per chunk",
+    )
+
     return parser
 
 
@@ -108,10 +129,26 @@ def cmd_chunk(
 
     i = 0
     while i < len(words):
-        start = max(0, i - overlap) if i > 0 else 0
+        start = max(0, i - overlap)
         chunk = " ".join(words[start : start + chunk_size])
         chunks.append(chunk)
-        i += chunk_size
+        i = start + chunk_size
+
+    return chunks
+
+
+def cmd_semantic_chunk(
+    text: str, chunk_size: int = DEFAULT_MAX_CHUNK_SIZE, overlap: int = 0
+):
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    chunks = []
+
+    i = 0
+    while i <= len(sentences):
+        start = max(0, i - overlap)
+        chunk = " ".join(sentences[start : start + chunk_size])
+        chunks.append(chunk)
+        i = start + chunk_size
 
     return chunks
 
@@ -161,6 +198,17 @@ def main():
             chunks = cmd_chunk(text, chunk_size, overlap)
 
             print(f"Chunking {len(text)} characters")
+            for i, chunk in enumerate(chunks, 1):
+                print(f"{i}. {chunk}")
+
+        case "semantic_chunk":
+            text = cast(str, args.text)
+            chunk_size = cast(int, args.max_chunk_size)
+            overlap = cast(int, args.overlap)
+
+            chunks = cmd_semantic_chunk(text, chunk_size, overlap)
+
+            print(f"Semantically chunking {len(text)} characters")
             for i, chunk in enumerate(chunks, 1):
                 print(f"{i}. {chunk}")
 

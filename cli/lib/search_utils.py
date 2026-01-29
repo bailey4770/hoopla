@@ -26,6 +26,7 @@ CACHE_DIR = Path("./cache")
 _PUNCT_TABLE = str.maketrans("", "", string.punctuation)
 DEFAULT_SEARCH_LIMIT = 5
 DEFAULT_CHUNK_SIZE = 200
+DEFAULT_MAX_CHUNK_SIZE = 4
 DEFAULT_CHUNK_OVERLAP = 2
 BM25_K1 = 1.5
 BM25_B = 0.75
