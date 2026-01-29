@@ -70,7 +70,7 @@ def get_parser() -> argparse.ArgumentParser:
     )
     _ = bm25search_parser.add_argument("query", type=str, help="Search query")
     _ = bm25search_parser.add_argument(
-        "limit",
+        "--limit",
         type=int,
         nargs="?",
         default=DEFAULT_SEARCH_LIMIT,

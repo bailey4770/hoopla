@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 
 import argparse
-import json
 from typing import cast
 
 from lib.semantic_search import SemanticSearch
-from lib.search_utils import load_movies
+from lib.search_utils import load_movies, DEFAULT_SEARCH_LIMIT
 
 
 def get_parser() -> argparse.ArgumentParser:
@@ -24,6 +23,23 @@ def get_parser() -> argparse.ArgumentParser:
         help="Verifies the embeddings file and creates it if one does not exist",
     )
 
+    embded_query_parser = subparsers.add_parser(
+        "embedquery", help="Embdeds query to semantic vector"
+    )
+    _ = embded_query_parser.add_argument("query", type=str, help="Query to be embedded")
+
+    search_parser = subparsers.add_parser(
+        "search", help="Searches movie database for query"
+    )
+    _ = search_parser.add_argument("query", type=str, help="Query to be embedded")
+    _ = search_parser.add_argument(
+        "--limit",
+        type=int,
+        nargs="?",
+        default=DEFAULT_SEARCH_LIMIT,
+        help="Number of search results to print",
+    )
+
     return parser
 
 
@@ -36,11 +52,7 @@ def cmd_verify():
 
 def cmd_embed_text(text: str):
     search = SemanticSearch()
-    embedding = search.generate_embedding(text)
-
-    print(f"Text: {text}")
-    print(f"First 3 dimensions: {embedding[:3]}")
-    print(f"Dimensions: {embedding.shape[0]}")
+    return search.generate_embedding(text)
 
 
 def cmd_verify_embeddings():
@@ -55,6 +67,15 @@ def cmd_verify_embeddings():
     )
 
 
+def cmd_search(query: str, limit: int) -> list[dict[str, str | float]]:
+    search = SemanticSearch()
+
+    documents = load_movies()
+    _ = search.load_or_create_embeddings(documents)
+
+    return search.search(query, limit)
+
+
 def main():
     parser = get_parser()
     args = parser.parse_args()
@@ -65,10 +86,32 @@ def main():
 
         case "embed_text":
             text = cast(str, args.text)
-            cmd_embed_text(text)
+            embedding = cmd_embed_text(text)
+
+            print(f"Text: {text}")
+            print(f"First 3 dimensions: {embedding[:3]}")
+            print(f"Dimensions: {embedding.shape[0]}")
 
         case "verify_embeddings":
             cmd_verify_embeddings()
+
+        case "embedquery":
+            query = cast(str, args.query)
+            embedding = cmd_embed_text(query)
+
+            print(f"Query: {query}")
+            print(f"First 5 dimensions: {embedding[:5]}")
+            print(f"Shape: {embedding.shape}")
+
+        case "search":
+            query = cast(str, args.query)
+            limit = cast(int, args.limit)
+            results = cmd_search(query, limit)
+
+            for i, res in enumerate(results, 1):
+                print(
+                    f"{i}. {res["title"]} (score: {res["score"]})\n{res["description"]}"
+                )
 
         case _:
             parser.print_help()
