@@ -4,24 +4,20 @@ is done to stop my LSP blowing up and consuming all my memory.
 """
 
 import numpy as np
-from typing import final
+import re
+from sentence_transformers import SentenceTransformer
 
-from .search_utils import Movies, CACHE_DIR
+from .search_utils import Movies, Movie, CACHE_DIR, DEFAULT_MAX_CHUNK_SIZE
 
-
-def get_model():
-    from sentence_transformers import SentenceTransformer
-
-    return SentenceTransformer("all-MiniLM-L6-v2")
+DEFAULT_MODEL_NAME = "all-MiniLM-L6-v2"
 
 
-@final
 class SemanticSearch:
-    def __init__(self):
-        self.model = get_model()
+    def __init__(self, model_name: str = DEFAULT_MODEL_NAME):
+        self.model: SentenceTransformer = SentenceTransformer(model_name)
         self.embeddings = None
         self.documents = None
-        self.document_map = {}
+        self.document_map: dict[int, Movie] = {}
 
     def generate_embedding(self, text: str):
         if not text.strip():
@@ -31,9 +27,9 @@ class SemanticSearch:
         return embedding[0]
 
     def build_embeddings(self, documents: Movies):
-        movie_strings: list[str] = []
-        for doc in documents:
-            movie_strings.append(f"{doc['title']}: {doc['description']}")
+        movie_strings: list[str] = [
+            f"{doc['title']}: {doc['description']}" for doc in documents
+        ]
 
         self.embeddings = self.model.encode(movie_strings, show_progress_bar=True)
         np.save(CACHE_DIR.joinpath("movie_embeddings.npy"), self.embeddings)
@@ -41,9 +37,7 @@ class SemanticSearch:
 
     def load_or_create_embeddings(self, documents: Movies):
         self.documents = documents
-
-        for doc in documents:
-            self.document_map[doc["id"]] = doc
+        self.document_map = {doc["id"]: doc for doc in documents}
 
         embeddings_path = CACHE_DIR.joinpath("movie_embeddings.npy")
         if not embeddings_path.exists():
@@ -55,7 +49,7 @@ class SemanticSearch:
 
         return self.embeddings
 
-    def search(self, query, limit):
+    def search(self, query, limit) -> list[dict[str, float | str]]:
         if self.embeddings is None:
             raise ValueError(
                 "No embeddings loaded. Call `load_or_create_embeddings` first."
@@ -79,6 +73,34 @@ class SemanticSearch:
         ]
 
 
+class ChunkedSemanticSearch(SemanticSearch):
+    def __init__(self, model_name=DEFAULT_MODEL_NAME) -> None:
+        super().__init__(model_name)
+        self.chunk_embeddings = None
+        self.chunk_metadata = None
+
+    def build_chunked_encodings(self, documents: Movies):
+        all_chunks: list[str] = []
+        all_chunk_metadata: list[dict[any, any]] = []
+
+        for i, doc in enumerate(documents):
+            if doc["description"] == "":
+                continue
+
+            chunks = semantic_chunking(doc["description"], 4, 1)
+            all_chunks.extend(chunks)
+
+            for chunk in chunks:
+
+                all_chunk_metadata.append()
+
+        return
+
+    def load_or_create_chunk_embeddings(self, documents: Movies) -> np.ndarray:
+        self.documents = documents
+        self.document_map = {doc["id"]: doc for doc in documents}
+
+
 def cosine_similarity(vec1, vec2) -> float:
     dot_product = np.dot(vec1, vec2)
     norm1 = np.linalg.norm(vec1)
@@ -88,3 +110,19 @@ def cosine_similarity(vec1, vec2) -> float:
         return 0.0
 
     return dot_product / (norm1 * norm2)
+
+
+def semantic_chunking(
+    text: str, chunk_size: int = DEFAULT_MAX_CHUNK_SIZE, overlap: int = 0
+) -> list[str]:
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    chunks = []
+
+    i = 0
+    while i <= len(sentences):
+        start = max(0, i - overlap)
+        chunk = " ".join(sentences[start : start + chunk_size])
+        chunks.append(chunk)
+        i = start + chunk_size
+
+    return chunks

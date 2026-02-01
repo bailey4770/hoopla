@@ -4,7 +4,7 @@ import argparse
 import re
 from typing import cast
 
-from lib.semantic_search import SemanticSearch
+from lib.semantic_search import SemanticSearch, semantic_chunking
 from lib.search_utils import (
     DEFAULT_CHUNK_OVERLAP,
     DEFAULT_MAX_CHUNK_SIZE,
@@ -124,17 +124,7 @@ def cmd_chunk(
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     overlap: int = DEFAULT_CHUNK_OVERLAP,
 ) -> list[str]:
-    words = text.split()
-    chunks = []
-
-    i = 0
-    while i < len(words):
-        start = max(0, i - overlap)
-        chunk = " ".join(words[start : start + chunk_size])
-        chunks.append(chunk)
-        i = start + chunk_size
-
-    return chunks
+    return semantic_chunking(text, chunk_size, overlap)
 
 
 def cmd_semantic_chunk(
