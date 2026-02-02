@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 
 import argparse
-import re
 from typing import cast
 
-from lib.semantic_search import SemanticSearch, semantic_chunking
 from lib.search_utils import (
     DEFAULT_CHUNK_OVERLAP,
-    DEFAULT_MAX_CHUNK_SIZE,
-    load_movies,
-    DEFAULT_SEARCH_LIMIT,
     DEFAULT_CHUNK_SIZE,
+    DEFAULT_MAX_CHUNK_SIZE,
+    DEFAULT_SEARCH_LIMIT,
+    load_movies,
 )
+from lib.semantic_search import ChunkedSemanticSearch, SemanticSearch, semantic_chunking
 
 
 def get_parser() -> argparse.ArgumentParser:
@@ -83,6 +82,10 @@ def get_parser() -> argparse.ArgumentParser:
         help="Overlap words per chunk",
     )
 
+    _ = subparsers.add_parser(
+        "embed_chunks", help="Embeds movie database chunks to semantic vectors"
+    )
+
     return parser
 
 
@@ -130,17 +133,13 @@ def cmd_chunk(
 def cmd_semantic_chunk(
     text: str, chunk_size: int = DEFAULT_MAX_CHUNK_SIZE, overlap: int = 0
 ):
-    sentences = re.split(r"(?<=[.!?])\s+", text)
-    chunks = []
+    return semantic_chunking(text, chunk_size, overlap)
 
-    i = 0
-    while i <= len(sentences):
-        start = max(0, i - overlap)
-        chunk = " ".join(sentences[start : start + chunk_size])
-        chunks.append(chunk)
-        i = start + chunk_size
+def cmd_embed_chunks():
+    search = ChunkedSemanticSearch()
+    documents = load_movies()
 
-    return chunks
+    return search.load_or_create_embeddings(documents)
 
 
 def main():
@@ -201,6 +200,10 @@ def main():
             print(f"Semantically chunking {len(text)} characters")
             for i, chunk in enumerate(chunks, 1):
                 print(f"{i}. {chunk}")
+
+        case "embed_chunks":
+            embeddings = cmd_embed_chunks()
+            print(f"Generated {len(embeddings)} chunked embeddings")
 
         case _:
             parser.print_help()

@@ -1,9 +1,9 @@
 import json
-import string
-from nltk.stem import PorterStemmer
 from pathlib import Path
+import string
+from typing import Callable, TypedDict, cast
 
-from typing import TypedDict, cast, Callable
+from nltk.stem import PorterStemmer
 
 
 class Movie(TypedDict):
@@ -17,7 +17,6 @@ Movies = list[Movie]
 
 class MovieData(TypedDict):
     movies: Movies
-
 
 MOVIES_FILE_PATH = "./data/movies.json"
 STOPWORDS_FILE_PATH = "./data/stopwords.txt"
@@ -57,7 +56,7 @@ def load_movies() -> Movies:
     return movies_data["movies"]
 
 
-def print_search_results(query: str, search_results: list[tuple[int, str]]):
+def print_search_results(query: str, search_results: list[tuple[int, str]]) -> None:
     print(f"Searching for: {query}")
     for i, res in enumerate(search_results, 1):
         print(f"{i}. {res[1]}")

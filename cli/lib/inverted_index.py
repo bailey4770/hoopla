@@ -18,7 +18,7 @@ from .search_utils import (
 
 
 class InvertedIndex:
-    def __init__(self):
+    def __init__(self) -> None:
         self.index: dict[str, set[int]] = defaultdict(set)
         self.docmap: dict[int, str] = {}
         self.term_frequencies: dict[int, Counter[str]] = {}
