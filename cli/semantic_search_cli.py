@@ -86,6 +86,20 @@ def get_parser() -> argparse.ArgumentParser:
         "embed_chunks", help="Embeds movie database chunks to semantic vectors"
     )
 
+    search_chunked_parser = subparsers.add_parser(
+        "search_chunked", help="Searches chunked movie database for query"
+    )
+    _ = search_chunked_parser.add_argument(
+        "query", type=str, help="Query to be searched"
+    )
+    _ = search_chunked_parser.add_argument(
+        "--limit",
+        type=int,
+        nargs="?",
+        default=DEFAULT_SEARCH_LIMIT,
+        help="Number of search results to print",
+    )
+
     return parser
 
 
@@ -135,11 +149,20 @@ def cmd_semantic_chunk(
 ):
     return semantic_chunking(text, chunk_size, overlap)
 
+
 def cmd_embed_chunks():
     search = ChunkedSemanticSearch()
     documents = load_movies()
 
     return search.load_or_create_embeddings(documents)
+
+
+def cmd_search_chunked(query: str, limit: int = DEFAULT_SEARCH_LIMIT):
+    search = ChunkedSemanticSearch()
+    documents = load_movies()
+
+    _ = search.load_or_create_embeddings(documents)
+    return search.search_chunks(query, limit)
 
 
 def main():
@@ -204,6 +227,15 @@ def main():
         case "embed_chunks":
             embeddings = cmd_embed_chunks()
             print(f"Generated {len(embeddings)} chunked embeddings")
+
+        case "search_chunked":
+            query = cast(str, args.query)
+            limit = cast(int, args.limit)
+            results = cmd_search_chunked(query, limit)
+
+            for i, res in enumerate(results, 1):
+                print(f"\n{i}. {res["title"]} (score: {res["score"]:.4f})")
+                print(f"   {res["document"]}")
 
         case _:
             parser.print_help()
