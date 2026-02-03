@@ -1,9 +1,11 @@
 import json
 from pathlib import Path
+import re
 import string
-from typing import Callable, TypedDict, cast, Any
+from typing import Any, Callable, TypedDict, cast
 
 from nltk.stem import PorterStemmer
+import numpy as np
 
 
 class Movie(TypedDict):
@@ -96,3 +98,57 @@ def format_search_result(
         "score": round(score, SCORE_PRECISION),
         "metadata": metadata if metadata else {},
     }
+
+
+def cosine_similarity(vec1: np.ndarray, vec2: np.ndarray) -> float:
+    dot_product = np.dot(vec1, vec2)
+    norm1 = np.linalg.norm(vec1)
+    norm2 = np.linalg.norm(vec2)
+
+    if norm1 == 0 or norm2 == 0:
+        return 0.0
+
+    return cast(float, dot_product / (norm1 * norm2))
+
+
+def semantic_chunking(
+    text: str, chunk_size: int = DEFAULT_MAX_CHUNK_SIZE, overlap: int = 0
+) -> list[str]:
+    """Split text into overlapping chunks of sentences.
+
+    Args:
+        text: Input text to chunk
+        chunk_size: Number of sentences per chunk
+        overlap: Number of sentences to overlap between chunks (must be less than chunk_size)
+
+    Returns:
+        List of text chunks
+    """
+    if overlap >= chunk_size:
+        raise ValueError("Overlap must be less than chunk_size")
+
+    stripped = text.strip()
+    if len(stripped) == 0:
+        return []
+
+    sentence_enders = (".", "!", "?")
+
+    sentences: list[str] = re.split(r"(?<=[.!?])\s+", stripped)
+    if len(sentences) == 1 and not sentences[0].endswith(sentence_enders):
+        return [sentences[0]]
+
+    # Filter out empty sentences
+    sentences: list[str] = [
+        s.strip() for s in sentences if s.strip() not in sentence_enders
+    ]
+
+    chunks: list[str] = []
+    i = 0
+    while i < len(sentences):
+        end = min(i + chunk_size, len(sentences))
+        chunk = " ".join(sentences[i:end])
+        if chunk:
+            chunks.append(chunk)
+        i = end - overlap
+
+    return chunks

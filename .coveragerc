@@ -1,0 +1,13 @@
+[run]
+omit = 
+    */test_*.py
+    */_remote_module_non_scriptable*
+    */site-packages/*
+    */.venv/*
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError

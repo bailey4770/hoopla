@@ -1,49 +1,23 @@
 from collections import defaultdict
 import json
-import re
-from typing import Any, cast, override
+
+from typing import Any, override
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
 from .search_utils import (
     CACHE_DIR,
-    DEFAULT_MAX_CHUNK_SIZE,
     DOC_PREVIEW_LENGTH,
     Movie,
     Movies,
     SimilarityScore,
+    cosine_similarity,
+    semantic_chunking,
     format_search_result,
 )
 
 DEFAULT_MODEL_NAME = "all-MiniLM-L6-v2"
-
-
-def cosine_similarity(vec1: np.ndarray, vec2: np.ndarray) -> float:
-    dot_product = np.dot(vec1, vec2)
-    norm1 = np.linalg.norm(vec1)
-    norm2 = np.linalg.norm(vec2)
-
-    if norm1 == 0 or norm2 == 0:
-        return 0.0
-
-    return cast(float, dot_product / (norm1 * norm2))
-
-
-def semantic_chunking(
-    text: str, chunk_size: int = DEFAULT_MAX_CHUNK_SIZE, overlap: int = 0
-) -> list[str]:
-    sentences = re.split(r"(?<=[.!?])\s+", text)
-    chunks = []
-
-    i = 0
-    while i < len(sentences):
-        start = max(0, i - overlap)
-        chunk = " ".join(sentences[start : start + chunk_size])
-        chunks.append(chunk)
-        i = start + chunk_size
-
-    return chunks
 
 
 class SemanticSearch:
