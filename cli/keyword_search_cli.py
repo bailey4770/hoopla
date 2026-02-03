@@ -15,7 +15,7 @@ from lib.search_utils import (
     print_search_results,
 )
 
-from lib.inverted_index import InvertedIndex
+from lib.keyword_search import InvertedIndex
 
 
 def get_parser() -> argparse.ArgumentParser:
@@ -154,7 +154,7 @@ def _get_index() -> InvertedIndex:
     try:
         index.load()
     except FileNotFoundError:
-        print("Error: index files not found")
+        print("Error: index files not found. Run 'build' command first.")
     except Exception as e:
         print("Error: ", e)
         sys.exit(1)
