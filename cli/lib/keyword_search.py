@@ -134,19 +134,18 @@ class InvertedIndex:
 
     def load(self) -> None:
         index_path = CACHE_DIR.joinpath("index.pkl")
-        if not index_path.exists():
-            raise FileNotFoundError()
-
         docmap_path = CACHE_DIR.joinpath("docmap.pkl")
-        if not docmap_path.exists():
-            raise FileNotFoundError()
-
         term_frequencies_path = CACHE_DIR.joinpath("term_frequencies.pkl")
-        if not term_frequencies_path.exists():
-            raise FileNotFoundError()
-
         doc_lengths_path = CACHE_DIR.joinpath("doc_lengths.pkl")
-        if not term_frequencies_path.exists():
+
+        if not any(
+            [
+                index_path.exists(),
+                docmap_path.exists(),
+                term_frequencies_path.exists(),
+                doc_lengths_path.exists(),
+            ]
+        ):
             raise FileNotFoundError()
 
         with open(index_path, "rb") as f:
