@@ -138,17 +138,19 @@ def semantic_chunking(
         return [sentences[0]]
 
     # Filter out empty sentences
-    sentences: list[str] = [
+    filtered_sentences = [
         s.strip() for s in sentences if s.strip() not in sentence_enders
     ]
 
     chunks: list[str] = []
     i = 0
-    while i < len(sentences):
-        end = min(i + chunk_size, len(sentences))
-        chunk = " ".join(sentences[i:end])
+    while i < len(filtered_sentences):
+        start = max(0, i - overlap)
+        end = start + chunk_size
+
+        chunk = " ".join(filtered_sentences[start:end])
         if chunk:
             chunks.append(chunk)
-        i = end - overlap
+        i = end
 
     return chunks
