@@ -14,6 +14,14 @@ class SimilarityScore(TypedDict):
     score: float
 
 
+class SearchResult(TypedDict):
+    title: str
+    description: str
+    bm25: float
+    semantic: float
+    hybrid: float
+
+
 MOVIES_FILE_PATH = "./data/movies.json"
 STOPWORDS_FILE_PATH = "./data/stopwords.txt"
 CACHE_DIR = Path("./cache")
@@ -77,7 +85,7 @@ def print_search_results(query: str, search_results: list[tuple[int, str]]) -> N
 
 
 def format_search_result(
-    doc_id: str, title: str, document: str, score: float, **metadata: Any
+    doc_id: int, title: str, document: str, score: float, **metadata: Any
 ) -> dict[str, Any]:
     """Create standardized search result
 

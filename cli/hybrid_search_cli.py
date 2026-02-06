@@ -63,11 +63,13 @@ def main() -> None:
             limit: int = cast(int, args.limit)
 
             results = cmd_weighted_search(hybrid_search, query, alpha, limit)
-            for i, res in enumerate(results, 1):
+            for i, (_, res) in enumerate(results, 1):
                 print(f"{i}. {res['title']}")
                 print(f"     Hybrid Score: {res['hybrid']:.4f}")
                 print(f"     BM25: {res['bm25']:.4f}, Semantic: {res['semantic']:.4f}")
-                print(f"     Description: {res['description'][:DOC_PREVIEW_LENGTH]}...")
+                print(
+                    f"     Description: {res['description'][:DOC_PREVIEW_LENGTH].replace('\n', ' ')}..."
+                )
 
         case _:
             parser.print_help()

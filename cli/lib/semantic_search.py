@@ -48,7 +48,7 @@ class SemanticSearch:
             CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
         self.documents = documents
-        self.document_map: dict[int, Movie] = {doc["id"]: doc for doc in documents}
+        self.document_map = {doc["id"]: doc for doc in documents}
 
         embeddings_path = CACHE_DIR.joinpath("movie_embeddings.npy")
         if not embeddings_path.exists():
@@ -193,7 +193,7 @@ class ChunkedSemanticSearch(SemanticSearch):
 
             results.append(
                 format_search_result(
-                    str(movie_id),
+                    movie_id,
                     self.document_map[movie_id]["title"],
                     document[:DOC_PREVIEW_LENGTH] + "...",
                     score,

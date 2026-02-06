@@ -2,7 +2,7 @@ from collections import defaultdict
 
 from .keyword_search import InvertedIndex
 from .semantic_search import ChunkedSemanticSearch
-from .search_utils import Movies, Movie, DEFAULT_SEARCH_LIMIT
+from .search_utils import Movies, Movie, SearchResult, DEFAULT_SEARCH_LIMIT
 
 
 class HybridSearch:
@@ -41,35 +41,34 @@ class HybridSearch:
             id: score for (id, _, _), score in zip(bm25_results, normalized_bm25_scores)
         }
 
-        semantic_results: list[dict[str, float]] = self.semantic_search.search_chunks(
-            query, limit * 500
+        semantic_results: list[dict[str, int | float]] = (
+            self.semantic_search.search_chunks(query, limit * 500)
         )
         normalized_semantic_scores: list[float] = normalize_scores(
             [res["score"] for res in semantic_results]
         )
         normalized_semantic_results: dict[int, float] = {
-            res["id"]: score
+            int(res["id"]): score
             for res, score in zip(semantic_results, normalized_semantic_scores)
         }
 
-        doc_id_to_scores: dict[int, dict[str, str | float]] = defaultdict(dict)
+        doc_id_to_scores: dict[int, SearchResult] = {}
 
-        for id in normalized_bm25_results:
-            doc_id_to_scores[id]["bm25"] = normalized_bm25_results[id]
+        for id in set(normalized_bm25_results) | set(normalized_semantic_results):
+            bm25 = normalized_bm25_results.get(id, 0.0)
+            semantic = normalized_semantic_results.get(id, 0.0)
 
-        for id in normalized_semantic_results:
-            doc_id_to_scores[id]["semantic"] = normalized_semantic_results[id]
-
-        for id, res in doc_id_to_scores.items():
-            doc_id_to_scores[id]["hybrid"] = _hybrid_score(
-                res.get("bm25", 0.0), res.get("semantic", 0.0), alpha
+            doc_id_to_scores[id] = SearchResult(
+                title=self.docmap[id]["title"],
+                description=self.docmap[id]["description"],
+                bm25=bm25,
+                semantic=semantic,
+                hybrid=_hybrid_score(bm25, semantic, alpha),
             )
-            doc_id_to_scores[id]["title"] = self.docmap[id]["title"]
-            doc_id_to_scores[id]["description"] = self.docmap[id]["description"]
 
         return sorted(
             doc_id_to_scores.items(),
-            key=lambda _, v: v["hybrid"],
+            key=lambda item: item[1]["hybrid"],
             reverse=True,
         )[:limit]
 
