@@ -1,7 +1,7 @@
 from collections import defaultdict
 import json
 
-from typing import Any, override
+from typing import Any, override, TypedDict
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
@@ -9,15 +9,45 @@ from sentence_transformers import SentenceTransformer
 from .search_utils import (
     CACHE_DIR,
     DOC_PREVIEW_LENGTH,
+    SCORE_PRECISION,
     Movie,
     Movies,
     SimilarityScore,
     cosine_similarity,
     semantic_chunking,
-    format_search_result,
 )
 
 DEFAULT_MODEL_NAME = "all-MiniLM-L6-v2"
+
+
+class SemanticResult(TypedDict):
+    title: str
+    document: str
+    score: float
+    metadata: Any
+
+
+def _format_search_result(
+    title: str, document: str, score: float, **metadata: Any
+) -> SemanticResult:
+    """Create standardized search result
+
+    Args:
+        doc_id: Document ID
+        title: Document title
+        document: Display text (usually short description)
+        score: Relevance/similarity score
+        **metadata: Additional metadata to include
+
+    Returns:
+        Dictionary representation of search result
+    """
+    return {
+        "title": title,
+        "document": document,
+        "score": round(score, SCORE_PRECISION),
+        "metadata": metadata if metadata else {},
+    }
 
 
 class SemanticSearch:
@@ -187,17 +217,14 @@ class ChunkedSemanticSearch(SemanticSearch):
         )
         top_movies: list[tuple[int, float]] = sorted_movies[:limit]
 
-        results: list[dict[str, Any]] = []
+        results: dict[int, SemanticResult] = {}
         for movie_id, score in top_movies:
             document: str = self.document_map[movie_id]["description"]
 
-            results.append(
-                format_search_result(
-                    movie_id,
-                    self.document_map[movie_id]["title"],
-                    document[:DOC_PREVIEW_LENGTH] + "...",
-                    score,
-                )
+            results[movie_id] = _format_search_result(
+                self.document_map[movie_id]["title"],
+                document[:DOC_PREVIEW_LENGTH] + "...",
+                score,
             )
 
         return results

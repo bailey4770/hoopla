@@ -2,7 +2,12 @@ from typing import cast
 import argparse
 
 from lib.hybrid_search import HybridSearch, normalize_scores
-from lib.search_utils import DEFAULT_SEARCH_LIMIT, DOC_PREVIEW_LENGTH, load_movies
+from lib.search_utils import (
+    DEFAULT_SEARCH_LIMIT,
+    DEFAULT_K,
+    DOC_PREVIEW_LENGTH,
+    load_movies,
+)
 
 
 def get_parser() -> argparse.ArgumentParser:
@@ -29,6 +34,21 @@ def get_parser() -> argparse.ArgumentParser:
         help="Number of top results to return",
     )
 
+    rrf_search_parser = subparsers.add_parser("rrf-search")
+    _ = rrf_search_parser.add_argument("query", type=str, help="Search query")
+    _ = rrf_search_parser.add_argument(
+        "--k",
+        type=float,
+        default=DEFAULT_K,
+        help="Weight given to higher vs lower ranked scores",
+    )
+    _ = rrf_search_parser.add_argument(
+        "--limit",
+        type=int,
+        default=DEFAULT_SEARCH_LIMIT,
+        help="Number of top results to return",
+    )
+
     return parser
 
 
@@ -42,12 +62,19 @@ def cmd_weighted_search(
     return hybrid_search.weighted_search(query, alpha, limit)
 
 
+def cmd_rrf_search(hybrid_search: HybridSearch, query: str, k: float, limit: int):
+    return hybrid_search.rrf_search(query, k, limit)
+
+
 def main() -> None:
     parser = get_parser()
     args = parser.parse_args()
 
     movie_data = load_movies()
     hybrid_search: HybridSearch = HybridSearch(movie_data)
+
+    query: str = cast(str, args.query)
+    limit: int = cast(int, args.limit)
 
     match args.command:
         case "normalize":
@@ -58,15 +85,27 @@ def main() -> None:
                 print(f"* {s:.4f}")
 
         case "weighted-search":
-            query: str = cast(str, args.query)
             alpha: float = cast(float, args.alpha)
-            limit: int = cast(int, args.limit)
 
             results = cmd_weighted_search(hybrid_search, query, alpha, limit)
             for i, (_, res) in enumerate(results, 1):
                 print(f"{i}. {res['title']}")
                 print(f"     Hybrid Score: {res['hybrid']:.4f}")
                 print(f"     BM25: {res['bm25']:.4f}, Semantic: {res['semantic']:.4f}")
+                print(
+                    f"     Description: {res['description'][:DOC_PREVIEW_LENGTH].replace('\n', ' ')}..."
+                )
+
+        case "rrf-search":
+            k: float = cast(float, args.k)
+
+            results = cmd_rrf_search(hybrid_search, query, k, limit)
+            for i, (_, res) in enumerate(results, 1):
+                print(f"{i}. {res['title']}")
+                print(f"     RRF Score: {res['rrf']:.4f}")
+                print(
+                    f"     BM25 Rank: {res['bm25_rank']}, Semantic Rank: {res['semantic_rank']}"
+                )
                 print(
                     f"     Description: {res['description'][:DOC_PREVIEW_LENGTH].replace('\n', ' ')}..."
                 )

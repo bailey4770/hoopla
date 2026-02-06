@@ -14,14 +14,6 @@ class SimilarityScore(TypedDict):
     score: float
 
 
-class SearchResult(TypedDict):
-    title: str
-    description: str
-    bm25: float
-    semantic: float
-    hybrid: float
-
-
 MOVIES_FILE_PATH = "./data/movies.json"
 STOPWORDS_FILE_PATH = "./data/stopwords.txt"
 CACHE_DIR = Path("./cache")
@@ -31,6 +23,7 @@ _PUNCT_TABLE = str.maketrans("", "", string.punctuation)
 DEFAULT_SEARCH_LIMIT = 5
 DOC_PREVIEW_LENGTH = 100
 SCORE_PRECISION = 4
+DEFAULT_K = 60
 
 DEFAULT_CHUNK_SIZE = 200
 DEFAULT_MAX_CHUNK_SIZE = 4
@@ -82,30 +75,6 @@ def print_search_results(query: str, search_results: list[tuple[int, str]]) -> N
     print(f"Searching for: {query}")
     for i, res in enumerate(search_results, 1):
         print(f"{i}. {res[1]}")
-
-
-def format_search_result(
-    doc_id: int, title: str, document: str, score: float, **metadata: Any
-) -> dict[str, Any]:
-    """Create standardized search result
-
-    Args:
-        doc_id: Document ID
-        title: Document title
-        document: Display text (usually short description)
-        score: Relevance/similarity score
-        **metadata: Additional metadata to include
-
-    Returns:
-        Dictionary representation of search result
-    """
-    return {
-        "id": doc_id,
-        "title": title,
-        "document": document,
-        "score": round(score, SCORE_PRECISION),
-        "metadata": metadata if metadata else {},
-    }
 
 
 def cosine_similarity(vec1: np.ndarray, vec2: np.ndarray) -> float:
