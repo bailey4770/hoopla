@@ -1,6 +1,6 @@
 from typing import cast
 import argparse
-
+import logging
 
 from lib.hybrid_search import HybridSearch, normalize_scores, RRFSearchResult
 from lib.search_utils import (
@@ -131,6 +131,10 @@ def cmd_rrf_search(
 
 
 def main() -> None:
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    )
+
     parser = get_parser()
     args = parser.parse_args()
 

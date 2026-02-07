@@ -2,8 +2,11 @@ import time
 import os
 from dotenv import load_dotenv
 from google import genai
+import logging
 
 from .hybrid_search import RRFSearchResult
+
+logger = logging.getLogger(__name__)
 
 
 def get_gemini_client() -> genai.Client:
@@ -74,6 +77,8 @@ def rerank_results(
     docs: list[tuple[int, RRFSearchResult]],
     limit: int,
 ) -> list[tuple[int, RRFSearchResult]]:
+    logger.info("%d results to rerank", len(docs))
+
     for _, doc in docs:
         prompt = f"""Rate how well this movie matches the search query.
 
@@ -95,6 +100,11 @@ def rerank_results(
         # sleep to avoid gemini rate limit
         # my rate limit is 5 per minute. Wait for 12 seconds.
         time.sleep(12)
+        logger.info(
+            "%s got new score %d. Waiting 12 seconds before next request",
+            doc["title"],
+            new_score,
+        )
 
     return sorted(
         docs,

@@ -1,8 +1,12 @@
 from typing import TypedDict
+import logging
 
 from .keyword_search import InvertedIndex
 from .semantic_search import ChunkedSemanticSearch, SemanticResult
 from .search_utils import Movies, Movie, DEFAULT_SEARCH_LIMIT
+
+
+logger = logging.getLogger(__name__)
 
 
 class HybridSearchResult(TypedDict):
@@ -48,6 +52,8 @@ class HybridSearch:
         return self.idx.bm25_search(query, limit)
 
     def weighted_search(self, query, alpha, limit=5):
+        logger.info("starting weighted search")
+
         bm25_results: list[tuple[int, str, float]] = self._bm25_search(
             query, limit * 500
         )
@@ -57,6 +63,7 @@ class HybridSearch:
         normalized_bm25_results: dict[int, float] = {
             id: score for (id, _, _), score in zip(bm25_results, normalized_bm25_scores)
         }
+        logger.info("bm25 results retrieved and normalized")
 
         semantic_results = self.semantic_search.search_chunks(query, limit * 500)
         normalized_semantic_scores: list[float] = normalize_scores(
@@ -66,6 +73,7 @@ class HybridSearch:
             int(id): score
             for id, score in zip(semantic_results.keys(), normalized_semantic_scores)
         }
+        logger.info("semantic results retrieved and normalized")
 
         combined_results: dict[int, HybridSearchResult] = {}
         for id in set(normalized_bm25_results) | set(normalized_semantic_results):
@@ -80,6 +88,7 @@ class HybridSearch:
                 hybrid=_weighted_score(bm25, semantic, alpha),
             )
 
+        logger.info("results combined and weighted scores assigned. unsorted")
         return sorted(
             combined_results.items(),
             key=lambda item: item[1]["hybrid"],
@@ -93,6 +102,7 @@ class HybridSearch:
         bm25_sorted: list[tuple[int, float]] = sorted(
             bm25_mapped.items(), key=lambda item: item[1], reverse=True
         )
+        logger.info("bm25 results retrieved and normalized")
 
         semantic_mapped: dict[int, SemanticResult] = self.semantic_search.search_chunks(
             query, limit * 500
@@ -100,6 +110,7 @@ class HybridSearch:
         semantic_sorted: list[tuple[int, SemanticResult]] = sorted(
             semantic_mapped.items(), key=lambda item: item[1]["score"], reverse=True
         )
+        logger.info("semantic results retrieved and normalized")
 
         combined_results: dict[int, RRFSearchResult] = {}
 
@@ -144,6 +155,7 @@ class HybridSearch:
 
             combined_results[id]["rrf"] = bm25_rrf + semantic_rrf
 
+        logger.info("results combined and weighted scores assigned. unsorted")
         return sorted(
             combined_results.items(),
             key=lambda item: item[1]["rrf"],
