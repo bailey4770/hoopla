@@ -90,7 +90,7 @@ class SemanticSearch:
 
         return self.embeddings
 
-    def search(self, query: str, limit: int) -> list[dict[str, float | str]]:
+    def search(self, query: str, limit: int) -> dict[int, SemanticResult]:
         if self.embeddings is None:
             raise ValueError(
                 "No embeddings loaded. Call `load_or_create_embeddings` first."
@@ -108,10 +108,14 @@ class SemanticSearch:
 
         sorted_scores = sorted(score_to_doc, key=lambda s: s[0], reverse=True)
         top_results = sorted_scores[:limit]
-        return [
-            {"score": score, "title": doc["title"], "description": doc["description"]}
+        return {
+            doc["id"]: _format_search_result(
+                title=doc["title"],
+                document=doc["description"][:DOC_PREVIEW_LENGTH],
+                score=score,
+            )
             for score, doc in top_results
-        ]
+        }
 
 
 class ChunkedSemanticSearch(SemanticSearch):

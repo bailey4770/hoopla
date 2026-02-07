@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 import re
 import string
-from typing import Any, Callable, TypedDict, cast
+from typing import Callable, TypedDict, cast
 
 from nltk.stem import PorterStemmer
 import numpy as np

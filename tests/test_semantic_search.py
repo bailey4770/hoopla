@@ -1,6 +1,6 @@
 import unittest
 
-from .semantic_search import semantic_chunking
+from cli.lib.semantic_search import semantic_chunking
 
 
 class TestSemanticChunking(unittest.TestCase):
