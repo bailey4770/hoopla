@@ -1,4 +1,4 @@
-from typing import cast
+from typing import cast, Callable
 import argparse
 import os
 from dotenv import load_dotenv
@@ -54,7 +54,7 @@ def get_parser() -> argparse.ArgumentParser:
     _ = rrf_search_parser.add_argument(
         "--enhance",
         type=str,
-        choices=["spell"],
+        choices=["spell", "rewrite"],
         help="Query enhancement method",
     )
 
@@ -72,23 +72,45 @@ def cmd_weighted_search(
 
 
 def cmd_rrf_search(
-    hybrid_search: HybridSearch, enhance_method: str, query: str, k: float, limit: int
+    hybrid_search: HybridSearch,
+    query: str,
+    k: float,
+    limit: int,
+    enhance_method: str = "",
 ):
-    if enhance_method == "spell":
-        enhanced_query = enhance_spelling(query)
-        print(f"Enhanced query ({enhance_method}): '{query}' -> '{enhanced_query}'\n")
+    if enhance_method:
+        match enhance_method:
+            case "spell":
+                enhanced_query = enhance_query(get_spelling_prompt(query))
+                print(
+                    f"Enhanced query ({enhance_method}): '{query}' -> '{enhanced_query}'"
+                )
+            case "rewrite":
+                enhanced_query = enhance_query(get_rewritten_prompt(query))
+                print(
+                    f"Enhanced query ({enhance_method}): '{query}' -> '{enhanced_query}'"
+                )
+            case _:
+                raise ValueError("unrecognised enhance method")
+
     else:
         enhanced_query = query
 
     return hybrid_search.rrf_search(enhanced_query, k, limit)
 
 
-def enhance_spelling(query: str) -> str:
+def enhance_query(prompt: str) -> str:
     load_dotenv()
     api_key = os.environ.get("GEMINI_API_KEY")
 
     client = genai.Client(api_key=api_key)
-    spell_prompt = f"""Fix any spelling errors in this movie search query.
+
+    response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+    return response.text if response.text else "no response"
+
+
+def get_spelling_prompt(query: str) -> str:
+    return f"""Fix any spelling errors in this movie search query.
 
 Only correct obvious typos. Don't change correctly spelled words.
 
@@ -97,10 +119,26 @@ Query: "{query}"
 If no errors, return the original query.
 Corrected:"""
 
-    response = client.models.generate_content(
-        model="gemini-2.5-flash", contents=spell_prompt
-    )
-    return response.text if response.text else "no response"
+
+def get_rewritten_prompt(query: str) -> str:
+    return f"""Rewrite this movie search query to be more specific and searchable.
+
+Original: "{query}"
+
+Consider:
+- Common movie knowledge (famous actors, popular films)
+- Genre conventions (horror = scary, animation = cartoon)
+- Keep it concise (under 10 words)
+- It should be a google style search query that's very specific
+- Don't use boolean logic
+
+Examples:
+
+- "that bear movie where leo gets attacked" -> "The Revenant Leonardo DiCaprio bear attack"
+- "movie about bear in london with marmalade" -> "Paddington London marmalade"
+- "scary movie with bear from few years ago" -> "bear horror movie 2015-2020"
+
+Rewritten query:"""
 
 
 def main() -> None:
@@ -137,7 +175,7 @@ def main() -> None:
             k: float = cast(float, args.k)
             enhance_method: str = cast(str, args.enhance)
 
-            results = cmd_rrf_search(hybrid_search, enhance_method, query, k, limit)
+            results = cmd_rrf_search(hybrid_search, query, k, limit, enhance_method)
             for i, (_, res) in enumerate(results, 1):
                 print(f"{i}. {res['title']}")
                 print(f"     RRF Score: {res['rrf']:.4f}")
