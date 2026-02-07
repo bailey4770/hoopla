@@ -19,6 +19,7 @@ class RRFSearchResult(TypedDict):
     bm25_rank: int
     semantic_rank: int
     rrf: float
+    rerank: int
 
 
 class HybridSearch:
@@ -85,7 +86,7 @@ class HybridSearch:
             reverse=True,
         )[:limit]
 
-    def rrf_search(self, query, k, limit=10):
+    def rrf_search(self, query, k, limit=10) -> list[tuple[int, RRFSearchResult]]:
         bm25_mapped: dict[int, float] = {
             id: score for id, _, score in self._bm25_search(query, limit * 500)
         }
@@ -112,6 +113,7 @@ class HybridSearch:
                     bm25_rank=0,
                     semantic_rank=0,
                     rrf=0.0,
+                    rerank=-1,
                 ),
             )["bm25_rank"] = rank
             rank += 1
@@ -126,6 +128,7 @@ class HybridSearch:
                     bm25_rank=0,
                     semantic_rank=0,
                     rrf=0.0,
+                    rerank=-1,
                 ),
             )["semantic_rank"] = rank
             rank += 1

@@ -1,15 +1,21 @@
-from typing import cast, Callable
+from typing import cast
 import argparse
-import os
-from dotenv import load_dotenv
-from google import genai
 
-from lib.hybrid_search import HybridSearch, normalize_scores
+
+from lib.hybrid_search import HybridSearch, normalize_scores, RRFSearchResult
 from lib.search_utils import (
     DEFAULT_SEARCH_LIMIT,
     DEFAULT_K,
     DOC_PREVIEW_LENGTH,
     load_movies,
+)
+from lib.llm_utils import (
+    get_gemini_client,
+    query_gemini,
+    get_spelling_query,
+    get_rewritten_query,
+    get_expanded_query,
+    rerank_results,
 )
 
 
@@ -57,6 +63,12 @@ def get_parser() -> argparse.ArgumentParser:
         choices=["spell", "rewrite", "expand"],
         help="Query enhancement method",
     )
+    _ = rrf_search_parser.add_argument(
+        "--rerank-method",
+        type=str,
+        choices=["individual"],
+        help="Query rerank method",
+    )
 
     return parser
 
@@ -77,21 +89,24 @@ def cmd_rrf_search(
     k: float,
     limit: int,
     enhance_method: str = "",
+    rerank_method: str = "",
 ):
+    client = get_gemini_client()
+
     if enhance_method:
         match enhance_method:
             case "spell":
-                enhanced_query = enhance_query(get_spelling_prompt(query))
+                enhanced_query = query_gemini(client, get_spelling_query(query))
                 print(
                     f"Enhanced query ({enhance_method}): '{query}' -> '{enhanced_query}'"
                 )
             case "rewrite":
-                enhanced_query = enhance_query(get_rewritten_prompt(query))
+                enhanced_query = query_gemini(client, get_rewritten_query(query))
                 print(
                     f"Enhanced query ({enhance_method}): '{query}' -> '{enhanced_query}'"
                 )
             case "expand":
-                enhanced_query = enhance_query(get_expanded_query(query))
+                enhanced_query = query_gemini(client, get_expanded_query(query))
                 print(
                     f"Enhanced query ({enhance_method}): '{query}' -> '{enhanced_query}'"
                 )
@@ -101,66 +116,18 @@ def cmd_rrf_search(
     else:
         enhanced_query = query
 
+    if rerank_method:
+        match rerank_method:
+            case "individual":
+                higher_limit = limit * 5
+                fast_results: list[tuple[int, RRFSearchResult]] = (
+                    hybrid_search.rrf_search(enhanced_query, k, higher_limit)
+                )
+                return rerank_results(client, enhanced_query, fast_results, limit)
+            case _:
+                raise ValueError("unrecognised rerank method")
+
     return hybrid_search.rrf_search(enhanced_query, k, limit)
-
-
-def enhance_query(prompt: str) -> str:
-    load_dotenv()
-    api_key = os.environ.get("GEMINI_API_KEY")
-
-    client = genai.Client(api_key=api_key)
-
-    response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-    return response.text if response.text else "no response"
-
-
-def get_spelling_prompt(query: str) -> str:
-    return f"""Fix any spelling errors in this movie search query.
-
-Only correct obvious typos. Don't change correctly spelled words.
-
-Query: "{query}"
-
-If no errors, return the original query.
-Corrected:"""
-
-
-def get_rewritten_prompt(query: str) -> str:
-    return f"""Rewrite this movie search query to be more specific and searchable.
-
-Original: "{query}"
-
-Consider:
-- Common movie knowledge (famous actors, popular films)
-- Genre conventions (horror = scary, animation = cartoon)
-- Keep it concise (under 10 words)
-- It should be a google style search query that's very specific
-- Don't use boolean logic
-
-Examples:
-
-- "that bear movie where leo gets attacked" -> "The Revenant Leonardo DiCaprio bear attack"
-- "movie about bear in london with marmalade" -> "Paddington London marmalade"
-- "scary movie with bear from few years ago" -> "bear horror movie 2015-2020"
-
-Rewritten query:"""
-
-
-def get_expanded_query(query: str) -> str:
-    return f"""Expand this movie search query with related terms.
-
-Add synonyms and related concepts that might appear in movie descriptions.
-Keep expansions relevant and focused.
-This will be appended to the original query.
-
-Examples:
-
-- "scary bear movie" -> "scary horror grizzly bear movie terrifying film"
-- "action movie with bear" -> "action thriller bear chase fight adventure"
-- "comedy with bear" -> "comedy funny bear humor lighthearted"
-
-Query: "{query}"
-"""
 
 
 def main() -> None:
@@ -196,10 +163,15 @@ def main() -> None:
         case "rrf-search":
             k: float = cast(float, args.k)
             enhance_method: str = cast(str, args.enhance)
+            rerank_method: str = cast(str, args.rerank_method)
 
-            results = cmd_rrf_search(hybrid_search, query, k, limit, enhance_method)
+            results = cmd_rrf_search(
+                hybrid_search, query, k, limit, enhance_method, rerank_method
+            )
             for i, (_, res) in enumerate(results, 1):
                 print(f"{i}. {res['title']}")
+                if res["rerank"] != -1:
+                    print(f"     Rerank Score: {res['rerank']}")
                 print(f"     RRF Score: {res['rrf']:.4f}")
                 print(
                     f"     BM25 Rank: {res['bm25_rank']}, Semantic Rank: {res['semantic_rank']}"
