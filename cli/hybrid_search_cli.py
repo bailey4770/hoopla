@@ -1,5 +1,8 @@
 from typing import cast
 import argparse
+import os
+from dotenv import load_dotenv
+from google import genai
 
 from lib.hybrid_search import HybridSearch, normalize_scores
 from lib.search_utils import (
@@ -48,6 +51,12 @@ def get_parser() -> argparse.ArgumentParser:
         default=DEFAULT_SEARCH_LIMIT,
         help="Number of top results to return",
     )
+    _ = rrf_search_parser.add_argument(
+        "--enhance",
+        type=str,
+        choices=["spell"],
+        help="Query enhancement method",
+    )
 
     return parser
 
@@ -62,8 +71,36 @@ def cmd_weighted_search(
     return hybrid_search.weighted_search(query, alpha, limit)
 
 
-def cmd_rrf_search(hybrid_search: HybridSearch, query: str, k: float, limit: int):
-    return hybrid_search.rrf_search(query, k, limit)
+def cmd_rrf_search(
+    hybrid_search: HybridSearch, enhance_method: str, query: str, k: float, limit: int
+):
+    if enhance_method == "spell":
+        enhanced_query = enhance_spelling(query)
+        print(f"Enhanced query ({enhance_method}): '{query}' -> '{enhanced_query}'\n")
+    else:
+        enhanced_query = query
+
+    return hybrid_search.rrf_search(enhanced_query, k, limit)
+
+
+def enhance_spelling(query: str) -> str:
+    load_dotenv()
+    api_key = os.environ.get("GEMINI_API_KEY")
+
+    client = genai.Client(api_key=api_key)
+    spell_prompt = f"""Fix any spelling errors in this movie search query.
+
+Only correct obvious typos. Don't change correctly spelled words.
+
+Query: "{query}"
+
+If no errors, return the original query.
+Corrected:"""
+
+    response = client.models.generate_content(
+        model="gemini-2.5-flash", contents=spell_prompt
+    )
+    return response.text if response.text else "no response"
 
 
 def main() -> None:
@@ -98,8 +135,9 @@ def main() -> None:
 
         case "rrf-search":
             k: float = cast(float, args.k)
+            enhance_method: str = cast(str, args.enhance)
 
-            results = cmd_rrf_search(hybrid_search, query, k, limit)
+            results = cmd_rrf_search(hybrid_search, enhance_method, query, k, limit)
             for i, (_, res) in enumerate(results, 1):
                 print(f"{i}. {res['title']}")
                 print(f"     RRF Score: {res['rrf']:.4f}")
