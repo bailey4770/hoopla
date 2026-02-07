@@ -54,7 +54,7 @@ def get_parser() -> argparse.ArgumentParser:
     _ = rrf_search_parser.add_argument(
         "--enhance",
         type=str,
-        choices=["spell", "rewrite"],
+        choices=["spell", "rewrite", "expand"],
         help="Query enhancement method",
     )
 
@@ -87,6 +87,11 @@ def cmd_rrf_search(
                 )
             case "rewrite":
                 enhanced_query = enhance_query(get_rewritten_prompt(query))
+                print(
+                    f"Enhanced query ({enhance_method}): '{query}' -> '{enhanced_query}'"
+                )
+            case "expand":
+                enhanced_query = enhance_query(get_expanded_query(query))
                 print(
                     f"Enhanced query ({enhance_method}): '{query}' -> '{enhanced_query}'"
                 )
@@ -139,6 +144,23 @@ Examples:
 - "scary movie with bear from few years ago" -> "bear horror movie 2015-2020"
 
 Rewritten query:"""
+
+
+def get_expanded_query(query: str) -> str:
+    return f"""Expand this movie search query with related terms.
+
+Add synonyms and related concepts that might appear in movie descriptions.
+Keep expansions relevant and focused.
+This will be appended to the original query.
+
+Examples:
+
+- "scary bear movie" -> "scary horror grizzly bear movie terrifying film"
+- "action movie with bear" -> "action thriller bear chase fight adventure"
+- "comedy with bear" -> "comedy funny bear humor lighthearted"
+
+Query: "{query}"
+"""
 
 
 def main() -> None:
