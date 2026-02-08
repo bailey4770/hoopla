@@ -1,4 +1,5 @@
 import time
+import json
 import os
 from dotenv import load_dotenv
 from google import genai
@@ -71,7 +72,7 @@ Query: "{query}"
 """
 
 
-def rerank_results(
+def rerank_results_individual(
     client: genai.Client,
     query: str,
     docs: list[tuple[int, RRFSearchResult]],
@@ -111,3 +112,42 @@ def rerank_results(
         key=lambda item: item[1]["rrf"],
         reverse=True,
     )[:limit]
+
+
+def rerank_results_batch(
+    client: genai.Client,
+    query: str,
+    docs: list[tuple[int, RRFSearchResult]],
+    limit: int,
+) -> list[tuple[int, RRFSearchResult]]:
+    logger.info("%d results to rerank. Making api call.", len(docs))
+
+    docs_mapped: dict[int, RRFSearchResult] = {id: doc for id, doc in docs}
+    doc_list_str = "\n\n".join(
+        f"ID: {id}, Title: {doc['title']}, Description: {doc['description']}"
+        for id, doc in docs
+    )
+
+    prompt = f"""Rank these movies by relevance to the search query.
+
+Query: "{query}"
+
+Movies:
+{doc_list_str}
+
+Return ONLY the IDs in order of relevance (best match first). Return a valid JSON list, nothing else. For example:
+
+[75, 12, 34, 2, 1]
+"""
+
+    reranked_list_str = query_gemini(client, prompt)
+    reranked_list = json.loads(reranked_list_str)
+    logger.info("reranked list received and loaded to json")
+
+    reranked_results: list[tuple[int, RRFSearchResult]] = []
+    for rank, res_id in enumerate(reranked_list, 1):
+        doc = docs_mapped[res_id]
+        doc["rerank"] = rank
+        reranked_results.append((res_id, doc))
+
+    return reranked_results[:limit]

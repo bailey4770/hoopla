@@ -15,7 +15,8 @@ from lib.llm_utils import (
     get_spelling_query,
     get_rewritten_query,
     get_expanded_query,
-    rerank_results,
+    rerank_results_individual,
+    rerank_results_batch,
 )
 
 
@@ -66,7 +67,7 @@ def get_parser() -> argparse.ArgumentParser:
     _ = rrf_search_parser.add_argument(
         "--rerank-method",
         type=str,
-        choices=["individual"],
+        choices=["individual", "batch"],
         help="Query rerank method",
     )
 
@@ -117,13 +118,18 @@ def cmd_rrf_search(
         enhanced_query = query
 
     if rerank_method:
+        higher_limit = limit * 5
+        fast_results: list[tuple[int, RRFSearchResult]] = hybrid_search.rrf_search(
+            enhanced_query, k, higher_limit
+        )
+
         match rerank_method:
             case "individual":
-                higher_limit = limit * 5
-                fast_results: list[tuple[int, RRFSearchResult]] = (
-                    hybrid_search.rrf_search(enhanced_query, k, higher_limit)
+                return rerank_results_individual(
+                    client, enhanced_query, fast_results, limit
                 )
-                return rerank_results(client, enhanced_query, fast_results, limit)
+            case "batch":
+                return rerank_results_batch(client, enhanced_query, fast_results, limit)
             case _:
                 raise ValueError("unrecognised rerank method")
 
