@@ -18,6 +18,7 @@ from lib.llm_utils import (
     rerank_results_individual,
     rerank_results_batch,
 )
+from lib.cross_encoder import rerank_cross_encoder
 
 
 def get_parser() -> argparse.ArgumentParser:
@@ -67,7 +68,7 @@ def get_parser() -> argparse.ArgumentParser:
     _ = rrf_search_parser.add_argument(
         "--rerank-method",
         type=str,
-        choices=["individual", "batch"],
+        choices=["individual", "batch", "cross_encoder"],
         help="Query rerank method",
     )
 
@@ -130,6 +131,8 @@ def cmd_rrf_search(
                 )
             case "batch":
                 return rerank_results_batch(client, enhanced_query, fast_results, limit)
+            case "cross_encoder":
+                return rerank_cross_encoder(query, fast_results, limit)
             case _:
                 raise ValueError("unrecognised rerank method")
 
@@ -138,7 +141,9 @@ def cmd_rrf_search(
 
 def main() -> None:
     logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+        level=logging.INFO,
+        format="%(asctime)s - %(filename)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
 
     parser = get_parser()
