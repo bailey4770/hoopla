@@ -1,4 +1,3 @@
-import re
 from typing import cast
 import argparse
 import logging
@@ -18,6 +17,7 @@ from lib.llm_utils import (
     get_expanded_query,
     rerank_results_individual,
     rerank_results_batch,
+    get_evaluation,
 )
 from lib.cross_encoder import rerank_cross_encoder
 
@@ -82,6 +82,11 @@ def get_parser() -> argparse.ArgumentParser:
         choices=["individual", "batch", "cross_encoder"],
         help="Query rerank method",
     )
+    _ = rrf_search_parser.add_argument(
+        "--evaluate",
+        action="store_true",
+        help="Enable LLM evaluation of results.",
+    )
 
     return parser
 
@@ -103,23 +108,24 @@ def cmd_rrf_search(
     limit: int,
     enhance_method: str = "",
     rerank_method: str = "",
+    evaluate: bool = False,
 ):
-    client = get_gemini_client()
+    gemini_client = get_gemini_client()
 
     if enhance_method:
         match enhance_method:
             case "spell":
-                enhanced_query = query_gemini(client, get_spelling_query(query))
+                enhanced_query = query_gemini(gemini_client, get_spelling_query(query))
                 print(
                     f"Enhanced query ({enhance_method}): '{query}' -> '{enhanced_query}'"
                 )
             case "rewrite":
-                enhanced_query = query_gemini(client, get_rewritten_query(query))
+                enhanced_query = query_gemini(gemini_client, get_rewritten_query(query))
                 print(
                     f"Enhanced query ({enhance_method}): '{query}' -> '{enhanced_query}'"
                 )
             case "expand":
-                enhanced_query = query_gemini(client, get_expanded_query(query))
+                enhanced_query = query_gemini(gemini_client, get_expanded_query(query))
                 print(
                     f"Enhanced query ({enhance_method}): '{query}' -> '{enhanced_query}'"
                 )
@@ -145,11 +151,11 @@ def cmd_rrf_search(
         match rerank_method:
             case "individual":
                 reranked = rerank_results_individual(
-                    client, enhanced_query, fast_results, limit
+                    gemini_client, enhanced_query, fast_results, limit
                 )
             case "batch":
                 reranked = rerank_results_batch(
-                    client, enhanced_query, fast_results, limit
+                    gemini_client, enhanced_query, fast_results, limit
                 )
             case "cross_encoder":
                 reranked = rerank_cross_encoder(query, fast_results, limit)
@@ -199,6 +205,7 @@ def main() -> None:
             k: float = cast(float, args.k)
             enhance_method: str = cast(str, args.enhance)
             rerank_method: str = cast(str, args.rerank_method)
+            evaluate: bool = cast(bool, args.evaluate)
 
             logger.debug(
                 "Running rrf-search cmd.\nQuery: %s\nk=%d\nEnhance Method: %s\nRerank Method: %s",
@@ -209,7 +216,7 @@ def main() -> None:
             )
 
             results = cmd_rrf_search(
-                hybrid_search, query, k, limit, enhance_method, rerank_method
+                hybrid_search, query, k, limit, enhance_method, rerank_method, evaluate
             )
             for i, (_, res) in enumerate(results, 1):
                 print(f"{i}. {res['title']}")
@@ -222,6 +229,10 @@ def main() -> None:
                 print(
                     f"     Description: {res['description'][:DOC_PREVIEW_LENGTH].replace('\n', ' ')}..."
                 )
+
+            if evaluate:
+                gemini_client = get_gemini_client()
+                get_evaluation(gemini_client, query, results)
 
         case _:
             parser.print_help()
