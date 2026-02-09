@@ -1,4 +1,3 @@
-from selectors import EpollSelector
 import time
 import json
 import os
@@ -7,7 +6,7 @@ from dotenv import load_dotenv
 from google import genai
 import logging
 
-from .hybrid_search import RRFSearchResult
+from .hybrid_search import RRFSearchResult, RRFSearchResults
 
 logger = logging.getLogger(__name__)
 
@@ -84,9 +83,9 @@ Query: "{query}"
 def rerank_results_individual(
     client: genai.Client,
     query: str,
-    docs: list[tuple[int, RRFSearchResult]],
+    docs: RRFSearchResults,
     limit: int,
-) -> list[tuple[int, RRFSearchResult]]:
+) -> RRFSearchResults:
     logger.info("%d results to rerank", len(docs))
 
     for _, doc in docs:
@@ -126,9 +125,9 @@ def rerank_results_individual(
 def rerank_results_batch(
     client: genai.Client,
     query: str,
-    docs: list[tuple[int, RRFSearchResult]],
+    docs: RRFSearchResults,
     limit: int,
-) -> list[tuple[int, RRFSearchResult]]:
+) -> RRFSearchResults:
     logger.info("%d results to rerank. Making api call.", len(docs))
 
     docs_mapped: dict[int, RRFSearchResult] = {id: doc for id, doc in docs}
@@ -213,3 +212,27 @@ def get_evaluation(
 
     for i, ((_, doc), score) in enumerate(zip(results, evaluation_results), 1):
         print(f"{i}. {doc['title']}: {score}/3")
+
+
+def get_rag_prompt(query: str, results: RRFSearchResults) -> str:
+    formatted_results: list[str] = [
+        f"Title: {doc['title']}, Description: {doc['description']}"
+        for _, doc in results
+    ]
+
+    prompt = f"""Answer the question or provide information based on the provided documents. This should be tailored to Hoopla users. Hoopla is a movie streaming service.
+
+Query: {query}
+
+Documents:
+{chr(10).join(formatted_results)}
+
+Provide a comprehensive answer that addresses the query:"""
+
+    return prompt
+
+
+def generate_rag_response(
+    client: genai.Client, query: str, results: RRFSearchResults
+) -> str:
+    return query_gemini(client, get_rag_prompt(query, results))
