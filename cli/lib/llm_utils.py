@@ -214,7 +214,7 @@ def get_evaluation(
         print(f"{i}. {doc['title']}: {score}/3")
 
 
-def get_nl_prompt(query: str, results: RRFSearchResults) -> str:
+def get_rag_nl_prompt(query: str, results: RRFSearchResults) -> str:
     formatted_results: list[str] = [
         f"Title: {doc['title']}, Description: {doc['description']}"
         for _, doc in results
@@ -232,13 +232,7 @@ Provide a comprehensive answer that addresses the query:"""
     return prompt
 
 
-def generate_rag_nl_response(
-    client: genai.Client, query: str, results: RRFSearchResults
-) -> str:
-    return query_gemini(client, get_nl_prompt(query, results))
-
-
-def get_summarize_prompt(query: str, results: RRFSearchResults) -> str:
+def get_rag_summarize_prompt(query: str, results: RRFSearchResults) -> str:
     formatted_results: list[str] = [
         f"Title: {doc['title']}, Description: {doc['description']}"
         for _, doc in results
@@ -258,7 +252,30 @@ Provide a comprehensive 3–4 sentence answer that combines information from mul
     return prompt
 
 
-def generate_rag_summary(
-    client: genai.Client, query: str, results: RRFSearchResults
-) -> str:
-    return query_gemini(client, get_summarize_prompt(query, results))
+def get_rag_citations_prompt(query: str, results: RRFSearchResults) -> str:
+    formatted_results: list[str] = [
+        f"Title: {doc['title']}, Description: {doc['description']}"
+        for _, doc in results
+    ]
+
+    prompt = f"""Answer the question or provide information based on the provided documents.
+
+This should be tailored to Hoopla users. Hoopla is a movie streaming service.
+
+If not enough information is available to give a good answer, say so but give as good of an answer as you can while citing the sources you have.
+
+Query: {query}
+
+Documents:
+{formatted_results}
+
+Instructions:
+- Provide a comprehensive answer that addresses the query
+- Cite sources using [1], [2], etc. format when referencing information
+- If sources disagree, mention the different viewpoints
+- If the answer isn't in the documents, say "I don't have enough information"
+- Be direct and informative
+
+Answer:"""
+
+    return prompt

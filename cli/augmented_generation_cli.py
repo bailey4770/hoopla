@@ -1,28 +1,22 @@
 import argparse
 import logging
-from enum import Enum
 
 from typing import cast, Callable
-from google import genai
-
 
 from lib.hybrid_search import HybridSearch, RRFSearchResults
 from lib.search_utils import load_movies
 from hybrid_search_cli import cmd_rrf_search
 from lib.llm_utils import (
-    generate_rag_nl_response,
-    generate_rag_summary,
     get_gemini_client,
+    get_rag_citations_prompt,
+    get_rag_nl_prompt,
+    get_rag_summarize_prompt,
+    query_gemini,
 )
 
 logger = logging.getLogger(__name__)
 
-RAGFunction = Callable[[genai.Client, str, RRFSearchResults], str]
-
-
-class RAGMethod(Enum):
-    NL_RESPONSE: RAGFunction = generate_rag_nl_response
-    SUMMARIZE: RAGFunction = generate_rag_summary
+RAGPromptGenerator = Callable[[str, RRFSearchResults], str]
 
 
 def get_parser() -> argparse.ArgumentParser:
@@ -39,10 +33,17 @@ def get_parser() -> argparse.ArgumentParser:
     )
     summarize_parser.add_argument("query", type=str, help="Search query for RAG")
 
+    citations_parser = subparsers.add_parser(
+        "citations", help="Get summary with citations (search + generate summary)"
+    )
+    citations_parser.add_argument("query", type=str, help="Search query for RAG")
+
     return parser
 
 
-def cmd_rag(query: str, rag_method: RAGFunction) -> tuple[RRFSearchResults, str]:
+def cmd_rag(
+    query: str, rag_prompter: RAGPromptGenerator
+) -> tuple[RRFSearchResults, str]:
     movies = load_movies()
     hybrid_search = HybridSearch(movies)
     gemini_client = get_gemini_client()
@@ -50,7 +51,7 @@ def cmd_rag(query: str, rag_method: RAGFunction) -> tuple[RRFSearchResults, str]
     results = cmd_rrf_search(hybrid_search, query, limit=5)
     logger.info("rrf search results received")
 
-    rag_response = rag_method(gemini_client, query, results)
+    rag_response = query_gemini(gemini_client, rag_prompter(query, results))
     logger.info("rag response generated")
 
     return results, rag_response
@@ -64,7 +65,7 @@ def main():
 
     match args.command:
         case "rag":
-            results, rag_response = cmd_rag(query, RAGMethod.NL_RESPONSE)
+            results, rag_response = cmd_rag(query, get_rag_nl_prompt)
 
             print("Search Results:")
             for _, res in results:
@@ -73,13 +74,22 @@ def main():
             print("\n RAG Response:\n", rag_response)
 
         case "summarize":
-            results, summary = cmd_rag(query, RAGMethod.SUMMARIZE)
+            results, summary = cmd_rag(query, get_rag_summarize_prompt)
 
             print("Search Results:")
             for _, res in results:
                 print(" - ", res["title"])
 
             print("\n LLM Summary:\n", summary)
+
+        case "citations":
+            results, cited_summary = cmd_rag(query, get_rag_citations_prompt)
+
+            print("Search Results:")
+            for _, res in results:
+                print(" - ", res["title"])
+
+            print("\n LLM Summary:\n", cited_summary)
 
         case _:
             parser.print_help()
