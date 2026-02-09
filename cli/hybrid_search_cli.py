@@ -1,3 +1,4 @@
+import re
 from typing import cast
 import argparse
 import logging
@@ -19,6 +20,16 @@ from lib.llm_utils import (
     rerank_results_batch,
 )
 from lib.cross_encoder import rerank_cross_encoder
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(filename)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logger = logging.getLogger(__name__)
 
 
 def get_parser() -> argparse.ArgumentParser:
@@ -118,34 +129,43 @@ def cmd_rrf_search(
     else:
         enhanced_query = query
 
+    logger.debug("Enhanced query: %s", enhanced_query)
+
     if rerank_method:
         higher_limit = limit * 5
         fast_results: list[tuple[int, RRFSearchResult]] = hybrid_search.rrf_search(
             enhanced_query, k, higher_limit
         )
 
+        logger.debug(
+            "Pre re-ranked results:\n%s",
+            ", ".join(res[1]["title"] for res in fast_results),
+        )
+
         match rerank_method:
             case "individual":
-                return rerank_results_individual(
+                reranked = rerank_results_individual(
                     client, enhanced_query, fast_results, limit
                 )
             case "batch":
-                return rerank_results_batch(client, enhanced_query, fast_results, limit)
+                reranked = rerank_results_batch(
+                    client, enhanced_query, fast_results, limit
+                )
             case "cross_encoder":
-                return rerank_cross_encoder(query, fast_results, limit)
+                reranked = rerank_cross_encoder(query, fast_results, limit)
             case _:
                 raise ValueError("unrecognised rerank method")
+
+        logger.debug(
+            "Re-ranked results:\n%s",
+            ", ".join(res[1]["title"] for res in reranked),
+        )
+        return reranked
 
     return hybrid_search.rrf_search(enhanced_query, k, limit)
 
 
 def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(filename)s - %(name)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-
     parser = get_parser()
     args = parser.parse_args()
 
@@ -179,6 +199,14 @@ def main() -> None:
             k: float = cast(float, args.k)
             enhance_method: str = cast(str, args.enhance)
             rerank_method: str = cast(str, args.rerank_method)
+
+            logger.debug(
+                "Running rrf-search cmd.\nQuery: %s\nk=%d\nEnhance Method: %s\nRerank Method: %s",
+                query,
+                k,
+                enhance_method,
+                rerank_method,
+            )
 
             results = cmd_rrf_search(
                 hybrid_search, query, k, limit, enhance_method, rerank_method
