@@ -214,7 +214,7 @@ def get_evaluation(
         print(f"{i}. {doc['title']}: {score}/3")
 
 
-def get_rag_prompt(query: str, results: RRFSearchResults) -> str:
+def get_nl_prompt(query: str, results: RRFSearchResults) -> str:
     formatted_results: list[str] = [
         f"Title: {doc['title']}, Description: {doc['description']}"
         for _, doc in results
@@ -232,7 +232,33 @@ Provide a comprehensive answer that addresses the query:"""
     return prompt
 
 
-def generate_rag_response(
+def generate_rag_nl_response(
     client: genai.Client, query: str, results: RRFSearchResults
 ) -> str:
-    return query_gemini(client, get_rag_prompt(query, results))
+    return query_gemini(client, get_nl_prompt(query, results))
+
+
+def get_summarize_prompt(query: str, results: RRFSearchResults) -> str:
+    formatted_results: list[str] = [
+        f"Title: {doc['title']}, Description: {doc['description']}"
+        for _, doc in results
+    ]
+
+    prompt = f"""
+Provide information useful to this query by synthesizing information from multiple search results in detail.
+The goal is to provide comprehensive information so that users know what their options are.
+Your response should be information-dense and concise, with several key pieces of information about the genre, plot, etc. of each movie.
+This should be tailored to Hoopla users. Hoopla is a movie streaming service.
+Query: {query}
+Search Results:
+{formatted_results}
+Provide a comprehensive 3–4 sentence answer that combines information from multiple sources:
+"""
+
+    return prompt
+
+
+def generate_rag_summary(
+    client: genai.Client, query: str, results: RRFSearchResults
+) -> str:
+    return query_gemini(client, get_summarize_prompt(query, results))
