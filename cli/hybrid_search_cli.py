@@ -21,11 +21,6 @@ from lib.llm_utils import (
 )
 from lib.cross_encoder import rerank_cross_encoder
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s - %(filename)s - %(name)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
 logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -104,12 +99,48 @@ def cmd_weighted_search(
 def cmd_rrf_search(
     hybrid_search: HybridSearch,
     query: str,
-    k: float,
-    limit: int,
+    k: float = DEFAULT_K,
+    limit: int = DEFAULT_SEARCH_LIMIT,
     enhance_method: str = "",
     rerank_method: str = "",
-    evaluate: bool = False,
-):
+) -> list[tuple[int, RRFSearchResult]]:
+    """
+    Perform a Reciprocal Rank Fusion (RRF) search with optional query enhancement and result reranking.
+
+    This function executes a hybrid search using RRF, with optional preprocessing of the query
+    through enhancement methods (spelling correction, rewriting, or expansion) and optional
+    post-processing of results through various reranking strategies.
+
+    Args:
+        hybrid_search (HybridSearch): The hybrid search instance to perform the search.
+        query (str): The search query string.
+        k (float): The RRF constant parameter used in the reciprocal rank fusion calculation.
+        limit (int): The maximum number of results to return.
+        enhance_method (str, optional): Query enhancement method to apply. Valid options are:
+            - "spell": Correct spelling errors in the query
+            - "rewrite": Rewrite the query for better search performance
+            - "expand": Expand the query with additional relevant terms
+            - "" (empty): No enhancement (default)
+        rerank_method (str, optional): Result reranking method to apply. Valid options are:
+            - "individual": Rerank results individually using LLM evaluation
+            - "batch": Rerank results in batch using LLM evaluation
+            - "cross_encoder": Rerank using a cross-encoder model
+            - "" (empty): No reranking (default)
+
+    Returns:
+        list[tuple[int, RRFSearchResult]]: A list of tuples containing the rank and search result,
+            ordered by relevance. When reranking is applied, returns the top `limit` reranked results.
+            Otherwise, returns the top `limit` results from the RRF search.
+
+    Raises:
+        ValueError: If an unrecognized enhance_method or rerank_method is provided.
+
+    Notes:
+        - When reranking is enabled, the function retrieves 5x the requested limit before reranking
+          to ensure higher quality results after reranking.
+        - Enhanced queries and reranking results are logged at debug level for monitoring.
+        - Query enhancement prints the transformation to stdout for visibility.
+    """
     gemini_client = get_gemini_client()
 
     if enhance_method:
@@ -216,7 +247,12 @@ def main() -> None:
             )
 
             results = cmd_rrf_search(
-                hybrid_search, query, k, limit, enhance_method, rerank_method, evaluate
+                hybrid_search,
+                query,
+                k,
+                limit,
+                enhance_method,
+                rerank_method,
             )
             for i, (_, res) in enumerate(results, 1):
                 print(f"{i}. {res['title']}")
@@ -239,4 +275,10 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s - %(filename)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
     main()

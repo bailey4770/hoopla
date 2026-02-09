@@ -26,6 +26,9 @@ class RRFSearchResult(TypedDict):
     rerank: int
 
 
+type RRFSearchResults = list[tuple[int, RRFSearchResult]]
+
+
 class HybridSearch:
     def __init__(self, documents: Movies) -> None:
         self.docmap: dict[int, Movie] = {}
@@ -95,7 +98,7 @@ class HybridSearch:
             reverse=True,
         )[:limit]
 
-    def rrf_search(self, query, k, limit=10) -> list[tuple[int, RRFSearchResult]]:
+    def rrf_search(self, query, k, limit=10) -> RRFSearchResults:
         bm25_mapped: dict[int, float] = {
             id: score for id, _, score in self._bm25_search(query, limit * 500)
         }
