@@ -1,12 +1,12 @@
 import argparse
 import logging
-
 from typing import cast, Callable
 
 from lib.hybrid_search import HybridSearch, RRFSearchResults
 from lib.search_utils import load_movies
 from hybrid_search_cli import cmd_rrf_search
 from lib.llm_utils import (
+    PromptPair,
     get_answer_question_prompt,
     get_gemini_client,
     get_rag_citations_prompt,
@@ -17,7 +17,7 @@ from lib.llm_utils import (
 
 logger = logging.getLogger(__name__)
 
-RAGPromptGenerator = Callable[[str, RRFSearchResults], str]
+RAGPromptGenerator = Callable[[str, RRFSearchResults], PromptPair]
 
 
 def get_parser() -> argparse.ArgumentParser:
@@ -40,7 +40,7 @@ def get_parser() -> argparse.ArgumentParser:
     citations_parser.add_argument("query", type=str, help="Search query for RAG")
 
     question_parser = subparsers.add_parser(
-        "question", help="Get an answer to a question based on data in move database"
+        "question", help="Get an answer to a question based on data in movie database"
     )
     question_parser.add_argument("query", type=str, help="Question to be answered")
 
@@ -57,7 +57,8 @@ def cmd_rag(
     results = cmd_rrf_search(hybrid_search, query, limit=5)
     logger.info("rrf search results received")
 
-    rag_response = query_gemini(gemini_client, rag_prompter(query, results))
+    sys_prompt, contents = rag_prompter(query, results)
+    rag_response = query_gemini(gemini_client, sys_prompt, contents)
     logger.info("rag response generated")
 
     return results, rag_response
@@ -72,38 +73,30 @@ def main():
     match args.command:
         case "rag":
             results, rag_response = cmd_rag(query, get_rag_nl_prompt)
-
             print("Search Results:")
             for _, res in results:
                 print(" - ", res["title"])
-
             print("\n RAG Response:\n", rag_response)
 
         case "summarize":
             results, summary = cmd_rag(query, get_rag_summarize_prompt)
-
             print("Search Results:")
             for _, res in results:
                 print(" - ", res["title"])
-
             print("\n LLM Summary:\n", summary)
 
         case "citations":
             results, cited_summary = cmd_rag(query, get_rag_citations_prompt)
-
             print("Search Results:")
             for _, res in results:
                 print(" - ", res["title"])
-
             print("\n LLM Summary:\n", cited_summary)
 
         case "question":
             results, answer = cmd_rag(query, get_answer_question_prompt)
-
             print("Search Results:")
             for _, res in results:
                 print(" - ", res["title"])
-
             print("\n Answer:\n", answer)
 
         case _:
@@ -116,5 +109,4 @@ if __name__ == "__main__":
         format="%(asctime)s - %(filename)s - %(name)s - %(levelname)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-
     main()

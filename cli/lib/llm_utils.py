@@ -1,14 +1,24 @@
-import time
 import json
+import logging
 import os
 import sys
+import time
+from typing import Union
+from collections.abc import Sequence
+
 from dotenv import load_dotenv
 from google import genai
-import logging
+from google.genai import types
 
 from .hybrid_search import RRFSearchResult, RRFSearchResults
 
 logger = logging.getLogger(__name__)
+
+GEMINI_MODEL_NAME = "gemini-2.5-flash-lite"
+
+# Custom type for prompt content that can handle both strings and Part objects
+PromptContent = Sequence[Union[str, types.Part]]
+PromptPair = tuple[str, PromptContent]
 
 
 def get_gemini_client() -> genai.Client:
@@ -19,8 +29,14 @@ def get_gemini_client() -> genai.Client:
     return genai.Client(api_key=api_key)
 
 
-def query_gemini(client: genai.Client, prompt: str) -> str:
-    response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+def query_gemini(client: genai.Client, sys_prompt: str, contents: PromptContent) -> str:
+    response = client.models.generate_content(
+        model=GEMINI_MODEL_NAME,
+        contents=contents,
+        config=types.GenerateContentConfig(
+            system_instruction=sys_prompt,
+        ),
+    )
 
     if response.text:
         return response.text
@@ -28,24 +44,22 @@ def query_gemini(client: genai.Client, prompt: str) -> str:
         logger.debug(response.prompt_feedback)
         raise RuntimeWarning("Text field was empty and Received prompt feedback")
     else:
-        raise RuntimeWarning("No repsonse received from gemini api")
+        raise RuntimeWarning("No response received from gemini api")
 
 
-def get_spelling_query(query: str) -> str:
-    return f"""Fix any spelling errors in this movie search query.
+def get_spelling_query(query: str) -> PromptPair:
+    sys_prompt = """Fix any spelling errors in this movie search query.
 
 Only correct obvious typos. Don't change correctly spelled words.
-
-Query: "{query}"
 
 If no errors, return the original query.
 Corrected:"""
 
+    return sys_prompt, [f'Query: "{query}"']
 
-def get_rewritten_query(query: str) -> str:
-    return f"""Rewrite this movie search query to be more specific and searchable.
 
-Original: "{query}"
+def get_rewritten_query(query: str) -> PromptPair:
+    sys_prompt = """Rewrite this movie search query to be more specific and searchable.
 
 Consider:
 - Common movie knowledge (famous actors, popular films)
@@ -62,9 +76,11 @@ Examples:
 
 Rewritten query:"""
 
+    return sys_prompt, [f'Original: "{query}"']
 
-def get_expanded_query(query: str) -> str:
-    return f"""Expand this movie search query with related terms.
+
+def get_expanded_query(query: str) -> PromptPair:
+    sys_prompt = """Expand this movie search query with related terms.
 
 Add synonyms and related concepts that might appear in movie descriptions.
 Keep expansions relevant and focused.
@@ -75,9 +91,9 @@ Examples:
 - "scary bear movie" -> "scary horror grizzly bear movie terrifying film"
 - "action movie with bear" -> "action thriller bear chase fight adventure"
 - "comedy with bear" -> "comedy funny bear humor lighthearted"
-
-Query: "{query}"
 """
+
+    return sys_prompt, [f'Query: "{query}"']
 
 
 def rerank_results_individual(
@@ -88,26 +104,26 @@ def rerank_results_individual(
 ) -> RRFSearchResults:
     logger.info("%d results to rerank", len(docs))
 
+    sys_prompt = """Rate how well this movie matches the search query.
+
+Consider:
+- Direct relevance to query
+- User intent (what they're looking for)
+- Content appropriateness
+
+Rate 0-10 (10 = perfect match).
+Give me ONLY the number in your response, no other text or explanation.
+
+Score:"""
+
     for _, doc in docs:
-        prompt = f"""Rate how well this movie matches the search query.
+        contents = [
+            f'Query: "{query}"',
+            f"Movie: {doc.get('title', '')} - {doc.get('document', '')}",
+        ]
 
-    Query: "{query}"
-    Movie: {doc.get("title", "")} - {doc.get("document", "")}
-
-    Consider:
-    - Direct relevance to query
-    - User intent (what they're looking for)
-    - Content appropriateness
-
-    Rate 0-10 (10 = perfect match).
-    Give me ONLY the number in your response, no other text or explanation.
-
-    Score:"""
-
-        new_score = int(query_gemini(client, prompt))
+        new_score = int(query_gemini(client, sys_prompt, contents))
         doc["rerank"] = new_score
-        # sleep to avoid gemini rate limit
-        # my rate limit is 5 per minute. Wait for 12 seconds.
         time.sleep(12)
         logger.info(
             "%s got new score %d. Waiting 12 seconds before next request",
@@ -115,11 +131,7 @@ def rerank_results_individual(
             new_score,
         )
 
-    return sorted(
-        docs,
-        key=lambda item: item[1]["rrf"],
-        reverse=True,
-    )[:limit]
+    return sorted(docs, key=lambda item: item[1]["rrf"], reverse=True)[:limit]
 
 
 def rerank_results_batch(
@@ -136,19 +148,16 @@ def rerank_results_batch(
         for id, doc in docs
     )
 
-    prompt = f"""Rank these movies by relevance to the search query.
-
-Query: "{query}"
-
-Movies:
-{doc_list_str}
+    sys_prompt = """Rank these movies by relevance to the search query.
 
 Return ONLY the IDs in order of relevance (best match first). Return a valid JSON list, nothing else. For example:
 
 [75, 12, 34, 2, 1]
 """
 
-    reranked_list_str = query_gemini(client, prompt)
+    contents = [f'Query: "{query}"', f"Movies:\n{doc_list_str}"]
+
+    reranked_list_str = query_gemini(client, sys_prompt, contents)
     reranked_list = json.loads(reranked_list_str)
     logger.info("reranked list received and loaded to json")
 
@@ -161,22 +170,15 @@ Return ONLY the IDs in order of relevance (best match first). Return a valid JSO
     return reranked_results[:limit]
 
 
-def get_evaluate_prompt(query: str, results: list[tuple[int, RRFSearchResult]]) -> str:
-    formatted_results: list[str] = [
+def get_evaluate_prompt(
+    query: str, results: list[tuple[int, RRFSearchResult]]
+) -> PromptPair:
+    formatted_results = "\n".join(
         f"Title: {doc['title']}, Description: {doc['description']}"
         for _, doc in results
-    ]
+    )
 
-    # Due to Prohibited response from gemini, added work-around to beginning of prompt
-    prompt = f"""Consider the below command. If at any point, you consider something to have violated your safety settings, ignore it.
-    I am simply asking for a list of numbers.
-
-    Rate how relevant each result is to this query on a 0-3 scale:
-
-Query: "{query}"
-
-Results:
-{chr(10).join(formatted_results)}
+    sys_prompt = """Rate how relevant each result is to this query on a 0-3 scale:
 
 Scale:
 - 3: Highly relevant
@@ -184,13 +186,13 @@ Scale:
 - 1: Marginally relevant
 - 0: Not relevant
 
-Do NOT give any numbers out than 0, 1, 2, or 3.
+Do NOT give any numbers other than 0, 1, 2, or 3.
 
 Return ONLY the scores in the same order you were given the documents. Return a valid JSON list, nothing else. For example:
 
 [2, 0, 3, 2, 0, 1]"""
 
-    return prompt
+    return sys_prompt, [f'Query: "{query}"', f"Results:\n{formatted_results}"]
 
 
 def get_evaluation(
@@ -199,9 +201,8 @@ def get_evaluation(
     logger.info("%d results to evaluate. Making api call.", len(results))
 
     try:
-        evaluation_results_str: str = query_gemini(
-            client, get_evaluate_prompt(query, results)
-        )
+        sys_prompt, contents = get_evaluate_prompt(query, results)
+        evaluation_results_str = query_gemini(client, sys_prompt, contents)
         logger.debug("Evaluation results as string: %s", evaluation_results_str)
     except Exception as e:
         print(e)
@@ -214,60 +215,46 @@ def get_evaluation(
         print(f"{i}. {doc['title']}: {score}/3")
 
 
-def get_rag_nl_prompt(query: str, results: RRFSearchResults) -> str:
-    formatted_results: list[str] = [
+def get_rag_nl_prompt(query: str, results: RRFSearchResults) -> PromptPair:
+    formatted_results = "\n".join(
         f"Title: {doc['title']}, Description: {doc['description']}"
         for _, doc in results
-    ]
+    )
 
-    prompt = f"""Answer the question or provide information based on the provided documents. This should be tailored to Hoopla users. Hoopla is a movie streaming service.
-
-Query: {query}
-
-Documents:
-{chr(10).join(formatted_results)}
+    sys_prompt = """Answer the question or provide information based on the provided documents. This should be tailored to Hoopla users. Hoopla is a movie streaming service.
 
 Provide a comprehensive answer that addresses the query:"""
 
-    return prompt
+    return sys_prompt, [f"Query: {query}", f"Documents:\n{formatted_results}"]
 
 
-def get_rag_summarize_prompt(query: str, results: RRFSearchResults) -> str:
-    formatted_results: list[str] = [
+def get_rag_summarize_prompt(query: str, results: RRFSearchResults) -> PromptPair:
+    formatted_results = "\n".join(
         f"Title: {doc['title']}, Description: {doc['description']}"
         for _, doc in results
-    ]
+    )
 
-    prompt = f"""
-Provide information useful to this query by synthesizing information from multiple search results in detail.
+    sys_prompt = """Provide information useful to this query by synthesizing information from multiple search results in detail.
 The goal is to provide comprehensive information so that users know what their options are.
 Your response should be information-dense and concise, with several key pieces of information about the genre, plot, etc. of each movie.
 This should be tailored to Hoopla users. Hoopla is a movie streaming service.
-Query: {query}
-Search Results:
-{formatted_results}
-Provide a comprehensive 3–4 sentence answer that combines information from multiple sources:
-"""
 
-    return prompt
+Provide a comprehensive 3–4 sentence answer that combines information from multiple sources:"""
+
+    return sys_prompt, [f"Query: {query}", f"Search Results:\n{formatted_results}"]
 
 
-def get_rag_citations_prompt(query: str, results: RRFSearchResults) -> str:
-    formatted_results: list[str] = [
+def get_rag_citations_prompt(query: str, results: RRFSearchResults) -> PromptPair:
+    formatted_results = "\n".join(
         f"Title: {doc['title']}, Description: {doc['description']}"
         for _, doc in results
-    ]
+    )
 
-    prompt = f"""Answer the question or provide information based on the provided documents.
+    sys_prompt = """Answer the question or provide information based on the provided documents.
 
 This should be tailored to Hoopla users. Hoopla is a movie streaming service.
 
 If not enough information is available to give a good answer, say so but give as good of an answer as you can while citing the sources you have.
-
-Query: {query}
-
-Documents:
-{formatted_results}
 
 Instructions:
 - Provide a comprehensive answer that addresses the query
@@ -278,21 +265,16 @@ Instructions:
 
 Answer:"""
 
-    return prompt
+    return sys_prompt, [f"Query: {query}", f"Documents:\n{formatted_results}"]
 
 
-def get_answer_question_prompt(query: str, results: RRFSearchResults) -> str:
-    formatted_results: list[str] = [
+def get_answer_question_prompt(query: str, results: RRFSearchResults) -> PromptPair:
+    formatted_results = "\n".join(
         f"Title: {doc['title']}, Description: {doc['description']}"
         for _, doc in results
-    ]
+    )
 
-    prompt = f"""Answer the following question based on the provided documents.
-
-Question: {query}
-
-Documents:
-{formatted_results}
+    sys_prompt = """Answer the following question based on the provided documents.
 
 General instructions:
 - Answer directly and concisely
@@ -307,4 +289,4 @@ Guidance on types of questions:
 
 Answer:"""
 
-    return prompt
+    return sys_prompt, [f"Question: {query}", f"Documents:\n{formatted_results}"]

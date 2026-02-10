@@ -146,23 +146,25 @@ def cmd_rrf_search(
     if enhance_method:
         match enhance_method:
             case "spell":
-                enhanced_query = query_gemini(gemini_client, get_spelling_query(query))
+                sys_prompt, contents = get_spelling_query(query)
+                enhanced_query = query_gemini(gemini_client, sys_prompt, contents)
                 print(
                     f"Enhanced query ({enhance_method}): '{query}' -> '{enhanced_query}'"
                 )
             case "rewrite":
-                enhanced_query = query_gemini(gemini_client, get_rewritten_query(query))
+                sys_prompt, contents = get_rewritten_query(query)
+                enhanced_query = query_gemini(gemini_client, sys_prompt, contents)
                 print(
                     f"Enhanced query ({enhance_method}): '{query}' -> '{enhanced_query}'"
                 )
             case "expand":
-                enhanced_query = query_gemini(gemini_client, get_expanded_query(query))
+                sys_prompt, contents = get_expanded_query(query)
+                enhanced_query = query_gemini(gemini_client, sys_prompt, contents)
                 print(
                     f"Enhanced query ({enhance_method}): '{query}' -> '{enhanced_query}'"
                 )
             case _:
                 raise ValueError("unrecognised enhance method")
-
     else:
         enhanced_query = query
 
