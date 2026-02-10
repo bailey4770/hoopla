@@ -38,6 +38,9 @@ def query_gemini(client: genai.Client, sys_prompt: str, contents: PromptContent)
         ),
     )
 
+    if response.usage_metadata is not None:
+        print(f"Total tokens:    {response.usage_metadata.total_token_count}")
+
     if response.text:
         return response.text
     elif response.prompt_feedback is not None:
@@ -290,3 +293,18 @@ Guidance on types of questions:
 Answer:"""
 
     return sys_prompt, [f"Question: {query}", f"Documents:\n{formatted_results}"]
+
+
+def get_image_search_prompt(query: str, image: bytes, mime: str) -> PromptPair:
+    system_prompt = """Given the included image and text query, rewrite the text query to improve search results from a movie database. Make sure to:
+- Synthesize visual and textual information
+- Focus on movie-specific details (actors, scenes, style, etc.)
+- Return only the rewritten query, without any additional commentary"""
+
+    parts: PromptContent = [
+        system_prompt,
+        types.Part.from_bytes(data=image, mime_type=mime),
+        query.strip(),
+    ]
+
+    return system_prompt, parts
