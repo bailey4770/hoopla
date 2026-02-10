@@ -7,6 +7,7 @@ from lib.hybrid_search import HybridSearch, RRFSearchResults
 from lib.search_utils import load_movies
 from hybrid_search_cli import cmd_rrf_search
 from lib.llm_utils import (
+    get_answer_question_prompt,
     get_gemini_client,
     get_rag_citations_prompt,
     get_rag_nl_prompt,
@@ -37,6 +38,11 @@ def get_parser() -> argparse.ArgumentParser:
         "citations", help="Get summary with citations (search + generate summary)"
     )
     citations_parser.add_argument("query", type=str, help="Search query for RAG")
+
+    question_parser = subparsers.add_parser(
+        "question", help="Get an answer to a question based on data in move database"
+    )
+    question_parser.add_argument("query", type=str, help="Question to be answered")
 
     return parser
 
@@ -90,6 +96,15 @@ def main():
                 print(" - ", res["title"])
 
             print("\n LLM Summary:\n", cited_summary)
+
+        case "question":
+            results, answer = cmd_rag(query, get_answer_question_prompt)
+
+            print("Search Results:")
+            for _, res in results:
+                print(" - ", res["title"])
+
+            print("\n Answer:\n", answer)
 
         case _:
             parser.print_help()
