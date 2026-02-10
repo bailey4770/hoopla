@@ -3,8 +3,8 @@ import logging
 import os
 import sys
 import time
-from typing import Union
 from collections.abc import Sequence
+from typing import Union
 
 from dotenv import load_dotenv
 from google import genai
@@ -45,7 +45,7 @@ def query_gemini(client: genai.Client, sys_prompt: str, contents: PromptContent)
         return response.text
     elif response.prompt_feedback is not None:
         logger.debug(response.prompt_feedback)
-        raise RuntimeWarning("Text field was empty and Received prompt feedback")
+        raise RuntimeWarning("Text field was empty and response was blocked.")
     else:
         raise RuntimeWarning("No response received from gemini api")
 
